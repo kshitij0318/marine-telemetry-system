@@ -2,7 +2,6 @@ const express = require("express");
 const mqtt = require("mqtt");
 const cors = require("cors");
 const WebSocket = require("ws");
-const topics = require("../shared/constants/topics");
 
 const app = express();
 app.use(cors());
@@ -10,8 +9,8 @@ app.use(express.json());
 
 const mqttClient = mqtt.connect("mqtt://localhost:1883");
 
-let latestCTD = null;
-let ctdHistory = [];
+let deviceRegistry = {};
+let history = {};
 
 function validateCTD(data) {
   const requiredFields = [
@@ -30,40 +29,47 @@ function validateCTD(data) {
 }
 
 mqttClient.on("connect", () => {
-  mqttClient.subscribe(topics.CTD.DATA);
+  mqttClient.subscribe("vessel/+/ctd/+/data");
 });
 
 mqttClient.on("message", (topic, message) => {
-  if (topic === topics.CTD.DATA) {
-    const parsed = JSON.parse(message.toString());
+  const parsed = JSON.parse(message.toString());
 
-    if (!validateCTD(parsed)) {
-      console.warn("Invalid CTD payload received");
-      return;
-    }
-
-    latestCTD = parsed;
-
-    ctdHistory.push(parsed);
-    if (ctdHistory.length > 200) {
-      ctdHistory.shift();
-    }
-
-    broadcast(parsed);
+  if (!validateCTD(parsed)) {
+    console.warn("Invalid CTD payload");
+    return;
   }
+
+  const { vesselId, deviceId } = parsed;
+  const key = `${vesselId}-${deviceId}`;
+
+  deviceRegistry[key] = parsed;
+
+  if (!history[key]) history[key] = [];
+  history[key].push(parsed);
+  if (history[key].length > 200) history[key].shift();
+
+  broadcast({
+    type: "ctd-update",
+    data: parsed
+  });
 });
 
-app.get("/api/ctd", (req, res) => {
-  res.json(latestCTD);
+app.get("/api/ctd/devices", (req, res) => {
+  res.json(Object.values(deviceRegistry));
 });
 
-app.get("/api/ctd/history", (req, res) => {
-  res.json(ctdHistory);
+app.get("/api/ctd/history/:vesselId/:deviceId", (req, res) => {
+  const key = `${req.params.vesselId}-${req.params.deviceId}`;
+  res.json(history[key] || []);
 });
 
 app.post("/api/ctd/command", (req, res) => {
-  const { command } = req.body;
-  mqttClient.publish(topics.CTD.COMMAND, command);
+  const { vesselId, deviceId, command } = req.body;
+
+  const topic = `vessel/${vesselId}/ctd/${deviceId}/command`;
+  mqttClient.publish(topic, command);
+
   res.json({ status: "sent" });
 });
 

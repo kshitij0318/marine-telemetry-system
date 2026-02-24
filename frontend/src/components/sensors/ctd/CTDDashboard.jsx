@@ -17,76 +17,169 @@ ChartJS.register(
   Tooltip
 );
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Line } from "react-chartjs-2";
 
 function CTDDashboard() {
+  const [devices, setDevices] = useState([]);
+  const [selected, setSelected] = useState(null);
   const [data, setData] = useState([]);
 
+  const wsRef = useRef(null);
+  const selectedRef = useRef(null);
+
   useEffect(() => {
+    selectedRef.current = selected;
+  }, [selected]);
+
+  // Open WebSocket ONCE
+  useEffect(() => {
+    fetch("http://localhost:5000/api/ctd/devices")
+      .then(res => res.json())
+      .then(setDevices);
+
     const ws = new WebSocket("ws://localhost:5000");
+    wsRef.current = ws;
 
     ws.onmessage = (event) => {
-      const parsed = JSON.parse(event.data);
-      setData(prev => [...prev.slice(-50), parsed]);
+      const message = JSON.parse(event.data);
+
+      if (message.type === "ctd-update") {
+        const device = message.data;
+
+        if (
+          selectedRef.current &&
+          selectedRef.current.vesselId === device.vesselId &&
+          selectedRef.current.deviceId === device.deviceId
+        ) {
+          setData(prev => [...prev.slice(-50), device]);
+        }
+
+        setDevices(prev => {
+          const filtered = prev.filter(
+            d => !(d.vesselId === device.vesselId && d.deviceId === device.deviceId)
+          );
+          return [...filtered, device];
+        });
+      }
     };
 
     return () => ws.close();
   }, []);
 
-  const sendCommand = async (command) => {
-    await fetch("http://localhost:5000/api/ctd/command", {
+  const sendCommand = (command) => {
+    if (!selected) return;
+
+    fetch("http://localhost:5000/api/ctd/command", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ command })
+      body: JSON.stringify({
+        vesselId: selected.vesselId,
+        deviceId: selected.deviceId,
+        command
+      })
     });
   };
 
-  const chartData = {
-    labels: data.map(d => new Date(d.timestamp).toLocaleTimeString()),
-    datasets: [
-      {
-        label: "Depth (m)",
-        data: data.map(d => d.depth),
-        borderColor: "blue"
-      },
-      {
-        label: "Water Temp (°C)",
-        data: data.map(d => d.waterTemperature),
-        borderColor: "red"
-      },
-      {
-        label: "Salinity (PSU)",
-        data: data.map(d => d.salinity),
-        borderColor: "green"
-      }
-    ]
-  };
+  const labels = data.map(d =>
+    new Date(d.timestamp).toLocaleTimeString()
+  );
 
-  const latest = data[data.length - 1];
+  const buildChart = (datasets) => ({
+    labels,
+    datasets
+  });
 
   return (
-    <div style={{ padding: "20px" }}>
-      <h1>CTD Level-3 Dashboard</h1>
+    <div style={{ padding: 20 }}>
+      <h1>CTD Telemetry Dashboard</h1>
 
-      <div style={{ marginBottom: "20px" }}>
-        <button onClick={() => sendCommand("START")}>Start</button>
-        <button onClick={() => sendCommand("STOP")}>Stop</button>
-        <button onClick={() => sendCommand("SET_RATE 500")}>Faster</button>
-        <button onClick={() => sendCommand("RESET")}>Reset Depth</button>
-      </div>
+      <select
+        onChange={(e) =>
+          setSelected(JSON.parse(e.target.value))
+        }
+      >
+        <option>Select Device</option>
+        {devices.map(d => (
+          <option
+            key={`${d.vesselId}-${d.deviceId}`}
+            value={JSON.stringify(d)}
+          >
+            {d.vesselId} - {d.deviceId}
+          </option>
+        ))}
+      </select>
 
-      {latest && (
-        <div style={{ marginBottom: "20px" }}>
-          <p><strong>Pressure:</strong> {latest.pressure} dBar</p>
-          <p><strong>Conductivity:</strong> {latest.conductivity} S/m</p>
-          <p><strong>Altimeter:</strong> {latest.altimeter} m</p>
-          <p><strong>Sound Velocity:</strong> {latest.soundVelocity} m/s</p>
-          <p><strong>Water Density:</strong> {latest.waterDensity} kg/m³</p>
-        </div>
+      {selected && (
+        <>
+          <div style={{ margin: "10px 0" }}>
+            <button onClick={() => sendCommand("START")}>Start</button>
+            <button onClick={() => sendCommand("STOP")}>Stop</button>
+            <button onClick={() => sendCommand("RESET")}>Reset</button>
+          </div>
+
+          {/* Physical Parameters */}
+          <h3>Physical Parameters</h3>
+          <Line
+            data={buildChart([
+              {
+                label: "Depth (m)",
+                data: data.map(d => d.depth),
+                borderColor: "blue"
+              },
+              {
+                label: "Pressure (dBar)",
+                data: data.map(d => d.pressure),
+                borderColor: "orange"
+              },
+              {
+                label: "Altimeter (m)",
+                data: data.map(d => d.altimeter),
+                borderColor: "gray"
+              }
+            ])}
+          />
+
+          {/* Water Properties */}
+          <h3 style={{ marginTop: 30 }}>Water Properties</h3>
+          <Line
+            data={buildChart([
+              {
+                label: "Temperature (°C)",
+                data: data.map(d => d.waterTemperature),
+                borderColor: "red"
+              },
+              {
+                label: "Salinity (PSU)",
+                data: data.map(d => d.salinity),
+                borderColor: "green"
+              },
+              {
+                label: "Conductivity (S/m)",
+                data: data.map(d => d.conductivity),
+                borderColor: "purple"
+              }
+            ])}
+          />
+
+          {/* Derived Metrics */}
+          <h3 style={{ marginTop: 30 }}>Derived Metrics</h3>
+          <Line
+            data={buildChart([
+              {
+                label: "Sound Velocity (m/s)",
+                data: data.map(d => d.soundVelocity),
+                borderColor: "brown"
+              },
+              {
+                label: "Water Density (kg/m³)",
+                data: data.map(d => d.waterDensity),
+                borderColor: "black"
+              }
+            ])}
+          />
+        </>
       )}
-
-      <Line data={chartData} />
     </div>
   );
 }

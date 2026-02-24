@@ -1,7 +1,9 @@
 module.exports = {
   CTD: {
-    DATA: "vessel/ctd/data",
-    STATUS: "vessel/ctd/status",
-    COMMAND: "vessel/ctd/command"
+    buildDataTopic: (vesselId, deviceId) =>
+      `vessel/${vesselId}/ctd/${deviceId}/data`,
+
+    buildCommandTopic: (vesselId, deviceId) =>
+      `vessel/${vesselId}/ctd/${deviceId}/command`
   }
 };
