@@ -1,0 +1,34 @@
+You are an expert full-stack developer and system architect. I am providing you with an Excel spreadsheet that contains detailed requirements for building simulators and MQTT bridges for multiple marine sensors (CTD, SVP, GNSS, Thruster, CurrentMeter, OAS, etc.). The spreadsheet includes:
+
+- A list of simulators and MQTT bridges, with assigned responsibilities and durations.
+- MQTT topic hierarchy and unit conventions.
+- Device-specific serial communication protocols and expected responses.
+- Tasks for building simulators (utility apps that mimic sensor behavior over serial).
+- Tasks for building MQTT bridges (apps that read serial data and publish JSON messages to MQTT topics).
+- Notes on how each sensor communicates (commands, responses, NMEA0183 packets, etc.).
+
+Your task:
+1. Read and analyze the entire spreadsheet carefully.
+2. Plot out a detailed roadmap for building a complete production-ready application.
+   - Backend: Node.js (handling simulators, MQTT bridges, broker integration).
+   - Frontend: React (dashboard for visualization and control).
+   - Infrastructure: MQTT broker setup, topic hierarchy, unit consistency.
+3. Provide me with fully working, copy-paste-ready code snippets for each part of the project:
+   - Simulators (Node.js apps that generate sensor data over serial).
+   - MQTT bridges (Node.js apps that publish sensor data to MQTT topics).
+   - Backend services (data aggregation, APIs).
+   - Frontend React components (charts, gauges, maps, subscription controls).
+   - Configuration for production deployment (Docker, environment variables, etc.).
+4. Ensure the roadmap covers:
+   - Data flow: Simulator → Serial → MQTT Bridge → MQTT Broker → Dashboard.
+   - How to subscribe/unsubscribe to specific topics from the dashboard.
+   - How to visualize data intuitively (graphs, gauges, maps).
+   - How to send control commands back to simulators from the dashboard.
+5. Deliver the roadmap in phases (infrastructure, simulators, bridges, dashboard, production deployment).
+6. For each phase, provide production-ready code examples that I can directly use.
+
+Important:
+- Use React for frontend and Node.js for backend.
+- Assume I want to take this project all the way to production-ready status.
+- Provide clear explanations alongside the code so I understand how each piece fits together.
+- Treat this as a real-world project, not just a prototype.
