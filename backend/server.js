@@ -11,6 +11,23 @@ app.use(express.json());
 const mqttClient = mqtt.connect("mqtt://localhost:1883");
 
 let latestCTD = null;
+let ctdHistory = [];
+
+function validateCTD(data) {
+  const requiredFields = [
+    "timestamp",
+    "pressure",
+    "depth",
+    "salinity",
+    "waterTemperature",
+    "conductivity",
+    "altimeter",
+    "soundVelocity",
+    "waterDensity"
+  ];
+
+  return requiredFields.every(field => field in data);
+}
 
 mqttClient.on("connect", () => {
   mqttClient.subscribe(topics.CTD.DATA);
@@ -18,13 +35,30 @@ mqttClient.on("connect", () => {
 
 mqttClient.on("message", (topic, message) => {
   if (topic === topics.CTD.DATA) {
-    latestCTD = JSON.parse(message.toString());
-    broadcast(latestCTD);
+    const parsed = JSON.parse(message.toString());
+
+    if (!validateCTD(parsed)) {
+      console.warn("Invalid CTD payload received");
+      return;
+    }
+
+    latestCTD = parsed;
+
+    ctdHistory.push(parsed);
+    if (ctdHistory.length > 200) {
+      ctdHistory.shift();
+    }
+
+    broadcast(parsed);
   }
 });
 
 app.get("/api/ctd", (req, res) => {
   res.json(latestCTD);
+});
+
+app.get("/api/ctd/history", (req, res) => {
+  res.json(ctdHistory);
 });
 
 app.post("/api/ctd/command", (req, res) => {
@@ -40,7 +74,7 @@ const server = app.listen(5000, () =>
 const wss = new WebSocket.Server({ server });
 
 function broadcast(data) {
-  wss.clients.forEach((client) => {
+  wss.clients.forEach(client => {
     if (client.readyState === WebSocket.OPEN) {
       client.send(JSON.stringify(data));
     }

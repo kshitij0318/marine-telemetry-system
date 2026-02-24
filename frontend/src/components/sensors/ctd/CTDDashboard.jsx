@@ -16,20 +16,19 @@ ChartJS.register(
   Legend,
   Tooltip
 );
+
 import { useEffect, useState } from "react";
 import { Line } from "react-chartjs-2";
 
 function CTDDashboard() {
   const [data, setData] = useState([]);
-  const [socket, setSocket] = useState(null);
 
   useEffect(() => {
     const ws = new WebSocket("ws://localhost:5000");
-    setSocket(ws);
 
     ws.onmessage = (event) => {
       const parsed = JSON.parse(event.data);
-      setData((prev) => [...prev.slice(-20), parsed]);
+      setData(prev => [...prev.slice(-50), parsed]);
     };
 
     return () => ws.close();
@@ -44,29 +43,49 @@ function CTDDashboard() {
   };
 
   const chartData = {
-    labels: data.map((d) => new Date(d.timestamp).toLocaleTimeString()),
+    labels: data.map(d => new Date(d.timestamp).toLocaleTimeString()),
     datasets: [
       {
-        label: "Depth",
-        data: data.map((d) => d.depth),
+        label: "Depth (m)",
+        data: data.map(d => d.depth),
         borderColor: "blue"
       },
       {
-        label: "Temperature",
-        data: data.map((d) => d.temperature),
+        label: "Water Temp (°C)",
+        data: data.map(d => d.waterTemperature),
         borderColor: "red"
+      },
+      {
+        label: "Salinity (PSU)",
+        data: data.map(d => d.salinity),
+        borderColor: "green"
       }
     ]
   };
 
+  const latest = data[data.length - 1];
+
   return (
-    <div>
-      <h1>CTD Dashboard</h1>
-      <button onClick={() => sendCommand("START")}>Start</button>
-      <button onClick={() => sendCommand("STOP")}>Stop</button>
-      <button onClick={() => sendCommand("SET_RATE 500")}>
-        Faster
-      </button>
+    <div style={{ padding: "20px" }}>
+      <h1>CTD Level-3 Dashboard</h1>
+
+      <div style={{ marginBottom: "20px" }}>
+        <button onClick={() => sendCommand("START")}>Start</button>
+        <button onClick={() => sendCommand("STOP")}>Stop</button>
+        <button onClick={() => sendCommand("SET_RATE 500")}>Faster</button>
+        <button onClick={() => sendCommand("RESET")}>Reset Depth</button>
+      </div>
+
+      {latest && (
+        <div style={{ marginBottom: "20px" }}>
+          <p><strong>Pressure:</strong> {latest.pressure} dBar</p>
+          <p><strong>Conductivity:</strong> {latest.conductivity} S/m</p>
+          <p><strong>Altimeter:</strong> {latest.altimeter} m</p>
+          <p><strong>Sound Velocity:</strong> {latest.soundVelocity} m/s</p>
+          <p><strong>Water Density:</strong> {latest.waterDensity} kg/m³</p>
+        </div>
+      )}
+
       <Line data={chartData} />
     </div>
   );
