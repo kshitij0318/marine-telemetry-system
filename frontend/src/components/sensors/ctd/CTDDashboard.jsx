@@ -5,7 +5,8 @@ import {
   LinearScale,
   PointElement,
   Legend,
-  Tooltip
+  Tooltip,
+  ArcElement
 } from "chart.js";
 
 ChartJS.register(
@@ -14,32 +15,30 @@ ChartJS.register(
   LinearScale,
   PointElement,
   Legend,
-  Tooltip
+  Tooltip,
+  ArcElement
 );
 
 import { useEffect, useState, useRef } from "react";
-import { Line } from "react-chartjs-2";
+import { Line, Doughnut } from "react-chartjs-2";
 
 function CTDDashboard() {
   const [devices, setDevices] = useState([]);
   const [selected, setSelected] = useState(null);
   const [data, setData] = useState([]);
 
-  const wsRef = useRef(null);
   const selectedRef = useRef(null);
 
   useEffect(() => {
     selectedRef.current = selected;
   }, [selected]);
 
-  // Open WebSocket ONCE
   useEffect(() => {
     fetch("http://localhost:5000/api/ctd/devices")
       .then(res => res.json())
       .then(setDevices);
 
     const ws = new WebSocket("ws://localhost:5000");
-    wsRef.current = ws;
 
     ws.onmessage = (event) => {
       const message = JSON.parse(event.data);
@@ -67,6 +66,8 @@ function CTDDashboard() {
     return () => ws.close();
   }, []);
 
+  const latest = data[data.length - 1];
+
   const sendCommand = (command) => {
     if (!selected) return;
 
@@ -90,94 +91,233 @@ function CTDDashboard() {
     datasets
   });
 
-  return (
-    <div style={{ padding: 20 }}>
-      <h1>CTD Telemetry Dashboard</h1>
 
-      <select
-        onChange={(e) =>
-          setSelected(JSON.parse(e.target.value))
+
+  const GaugeCard = ({ label, value, min, max, unit, color }) => {
+    const normalized = Math.min(
+      Math.max((value - min) / (max - min), 0),
+      1
+    );
+
+    const gaugeData = {
+      datasets: [
+        {
+          data: [normalized, 1 - normalized],
+          backgroundColor: [color, "#1e293b"],
+          borderWidth: 0,
+          circumference: 180,
+          rotation: 270
         }
-      >
-        <option>Select Device</option>
-        {devices.map(d => (
-          <option
-            key={`${d.vesselId}-${d.deviceId}`}
-            value={JSON.stringify(d)}
-          >
-            {d.vesselId} - {d.deviceId}
-          </option>
-        ))}
-      </select>
+      ]
+    };
 
-      {selected && (
-        <>
-          <div style={{ margin: "10px 0" }}>
-            <button onClick={() => sendCommand("START")}>Start</button>
-            <button onClick={() => sendCommand("STOP")}>Stop</button>
+    return (
+      <div
+        style={{
+          background: "#0f172a",
+          padding: 20,
+          borderRadius: 14,
+          boxShadow: "0 0 15px rgba(0,0,0,0.6)",
+          position: "relative",
+          height: 220
+        }}
+      >
+        <Doughnut
+          data={gaugeData}
+          options={{
+            cutout: "75%",
+            plugins: {
+              legend: { display: false },
+              tooltip: { enabled: false }
+            }
+          }}
+        />
+
+        <div
+          style={{
+            position: "absolute",
+            bottom: 55,
+            left: 0,
+            right: 0,
+            textAlign: "center"
+          }}
+        >
+          <div
+            style={{
+              fontSize: 26,
+              fontWeight: "bold",
+              color: "#ffffff"
+            }}
+          >
+            {value?.toFixed(2)}
+          </div>
+          <div style={{ fontSize: 13, color: "#94a3b8" }}>{unit}</div>
+        </div>
+
+        <div
+          style={{
+            position: "absolute",
+            bottom: 10,
+            left: 15,
+            fontSize: 12,
+            color: "#64748b"
+          }}
+        >
+          {min}
+        </div>
+
+        <div
+          style={{
+            position: "absolute",
+            bottom: 10,
+            right: 15,
+            fontSize: 12,
+            color: "#64748b"
+          }}
+        >
+          {max}
+        </div>
+
+        <div
+          style={{
+            position: "absolute",
+            bottom: -5,
+            left: 0,
+            right: 0,
+            textAlign: "center",
+            fontSize: 13,
+            color: "#cbd5e1"
+          }}
+        >
+          {label}
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div
+      style={{
+        background: "#0b1120",
+        minHeight: "100vh",
+        color: "#e2e8f0",
+        padding: 30
+      }}
+    >
+      <h1 style={{ marginBottom: 20 }}>CTD Telemetry Control Room</h1>
+
+      <div style={{ marginBottom: 20 }}>
+        <select
+          style={{
+            padding: 8,
+            borderRadius: 6,
+            background: "#1e293b",
+            color: "white",
+            border: "1px solid #334155"
+          }}
+          onChange={(e) => setSelected(JSON.parse(e.target.value))}
+        >
+          <option>Select Device</option>
+          {devices.map(d => (
+            <option
+              key={`${d.vesselId}-${d.deviceId}`}
+              value={JSON.stringify(d)}
+            >
+              {d.vesselId} - {d.deviceId}
+            </option>
+          ))}
+        </select>
+
+        {selected && (
+          <span style={{ marginLeft: 20 }}>
+            <button onClick={() => sendCommand("START")}>Start</button>{" "}
+            <button onClick={() => sendCommand("STOP")}>Stop</button>{" "}
             <button onClick={() => sendCommand("RESET")}>Reset</button>
+          </span>
+        )}
+      </div>
+
+      {selected && latest && (
+        <>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(4, 1fr)",
+              gap: 25,
+              marginBottom: 50
+            }}
+          >
+            <GaugeCard
+              label="Depth"
+              value={latest.depth}
+              min={0}
+              max={500}
+              unit="m"
+              color="#3b82f6"
+            />
+            <GaugeCard
+              label="Temperature"
+              value={latest.waterTemperature}
+              min={0}
+              max={40}
+              unit="°C"
+              color="#ef4444"
+            />
+            <GaugeCard
+              label="Salinity"
+              value={latest.salinity}
+              min={20}
+              max={40}
+              unit="PSU"
+              color="#10b981"
+            />
+            <GaugeCard
+              label="Sound Velocity"
+              value={latest.soundVelocity}
+              min={1400}
+              max={1600}
+              unit="m/s"
+              color="#f59e0b"
+            />
           </div>
 
-          {/* Physical Parameters */}
-          <h3>Physical Parameters</h3>
-          <Line
-            data={buildChart([
-              {
-                label: "Depth (m)",
-                data: data.map(d => d.depth),
-                borderColor: "blue"
-              },
-              {
-                label: "Pressure (dBar)",
-                data: data.map(d => d.pressure),
-                borderColor: "orange"
-              },
-              {
-                label: "Altimeter (m)",
-                data: data.map(d => d.altimeter),
-                borderColor: "gray"
-              }
-            ])}
-          />
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "2fr 1fr",
+              gap: 30
+            }}
+          >
+            <div>
+              <h3>Physical Parameters</h3>
+              <Line
+                data={buildChart([
+                  { label: "Depth", data: data.map(d => d.depth), borderColor: "#3b82f6" },
+                  { label: "Pressure", data: data.map(d => d.pressure), borderColor: "#f97316" },
+                  { label: "Altimeter", data: data.map(d => d.altimeter), borderColor: "#94a3b8" }
+                ])}
+              />
 
-          {/* Water Properties */}
-          <h3 style={{ marginTop: 30 }}>Water Properties</h3>
-          <Line
-            data={buildChart([
-              {
-                label: "Temperature (°C)",
-                data: data.map(d => d.waterTemperature),
-                borderColor: "red"
-              },
-              {
-                label: "Salinity (PSU)",
-                data: data.map(d => d.salinity),
-                borderColor: "green"
-              },
-              {
-                label: "Conductivity (S/m)",
-                data: data.map(d => d.conductivity),
-                borderColor: "purple"
-              }
-            ])}
-          />
+              <h3 style={{ marginTop: 40 }}>Derived Metrics</h3>
+              <Line
+                data={buildChart([
+                  { label: "Sound Velocity", data: data.map(d => d.soundVelocity), borderColor: "#f59e0b" },
+                  { label: "Water Density", data: data.map(d => d.waterDensity), borderColor: "#a855f7" }
+                ])}
+              />
+            </div>
 
-          {/* Derived Metrics */}
-          <h3 style={{ marginTop: 30 }}>Derived Metrics</h3>
-          <Line
-            data={buildChart([
-              {
-                label: "Sound Velocity (m/s)",
-                data: data.map(d => d.soundVelocity),
-                borderColor: "brown"
-              },
-              {
-                label: "Water Density (kg/m³)",
-                data: data.map(d => d.waterDensity),
-                borderColor: "black"
-              }
-            ])}
-          />
+            <div>
+              <h3>Water Properties</h3>
+              <Line
+                data={buildChart([
+                  { label: "Temperature", data: data.map(d => d.waterTemperature), borderColor: "#ef4444" },
+                  { label: "Salinity", data: data.map(d => d.salinity), borderColor: "#10b981" },
+                  { label: "Conductivity", data: data.map(d => d.conductivity), borderColor: "#6366f1" }
+                ])}
+              />
+            </div>
+          </div>
         </>
       )}
     </div>
