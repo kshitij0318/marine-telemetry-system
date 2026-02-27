@@ -10,15 +10,28 @@ const metricPriority = {
   salinity: ["CTD"],
   waterDensity: ["CTD"],
 
-  // GNSS metrics
   latitude: ["GNSS"],
   longitude: ["GNSS"],
   speed: ["GNSS"],
-  heading: ["GNSS"]
+  heading: ["GNSS"],
+
+  currentSpeed: ["CURRENTMETER"],
+  currentDirection: ["CURRENTMETER"],
+  waterFlowRate: ["CURRENTMETER"],
+  turbulenceIndex: ["CURRENTMETER"],
+
+  rpm: ["THRUSTER"],
+  thrustPower: ["THRUSTER"],
+  thrusterTemperature: ["THRUSTER"],
+  thrusterStatus: ["THRUSTER"],
+
+  forwardDistance: ["OAS"],
+  portDistance: ["OAS"],
+  starboardDistance: ["OAS"],
+  riskLevel: ["OAS"]
 };
 
 class AggregationService {
-
   updateRawData(payload) {
     const { vesselId, deviceId } = payload;
 

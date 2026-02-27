@@ -25,7 +25,7 @@ function GNSSDashboard() {
               ...prev,
               [vesselData.latitude, vesselData.longitude]
             ];
-            return updated.slice(-200); // keep last 200 points
+            return updated.slice(-200); 
           });
         }
 

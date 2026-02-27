@@ -26,6 +26,18 @@ function Sidebar() {
       <NavLink to="/ctd" style={linkStyle}>
         CTD
       </NavLink>
+
+      <NavLink to="/current-meter" style={linkStyle}>
+        Current Meter
+      </NavLink>
+
+      <NavLink to="/thruster" style={linkStyle}>
+        Thruster
+      </NavLink>
+
+      <NavLink to="/oas" style={linkStyle}>
+        OAS
+      </NavLink>
     </div>
   );
 }

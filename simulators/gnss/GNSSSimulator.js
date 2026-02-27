@@ -16,7 +16,7 @@ let latitude = 19.0760;
 let longitude = 72.8777;
 
 let heading = 90;
-let speed = 6; // knots
+let speed = 6;
 
 function generateGNSSData() {
   const movementFactor = 0.00015;

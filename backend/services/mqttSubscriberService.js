@@ -27,7 +27,6 @@ client.on("message", (topic, message) => {
     aggregationService.updateRawData(payload);
     aggregationService.recomputeVessel(vesselId);
 
-    // 🔥 Broadcast AFTER recompute (no circular dependency now)
     socketServer.broadcastParentUpdate(vesselId);
 
   } catch (err) {

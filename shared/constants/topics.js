@@ -2,7 +2,6 @@ module.exports = {
   CTD: {
     buildDataTopic: (vesselId, deviceId) =>
       `vessel/${vesselId}/ctd/${deviceId}/data`,
-
     buildCommandTopic: (vesselId, deviceId) =>
       `vessel/${vesselId}/ctd/${deviceId}/command`
   },
@@ -10,8 +9,28 @@ module.exports = {
   GNSS: {
     buildDataTopic: (vesselId, deviceId) =>
       `vessel/${vesselId}/gnss/${deviceId}/data`,
-
     buildCommandTopic: (vesselId, deviceId) =>
       `vessel/${vesselId}/gnss/${deviceId}/command`
+  },
+
+  CURRENTMETER: {
+    buildDataTopic: (vesselId, deviceId) =>
+      `vessel/${vesselId}/currentMeter/${deviceId}/data`,
+    buildCommandTopic: (vesselId, deviceId) =>
+      `vessel/${vesselId}/currentMeter/${deviceId}/command`
+  },
+
+  THRUSTER: {
+    buildDataTopic: (vesselId, deviceId) =>
+      `vessel/${vesselId}/thruster/${deviceId}/data`,
+    buildCommandTopic: (vesselId, deviceId) =>
+      `vessel/${vesselId}/thruster/${deviceId}/command`
+  },
+
+  OAS: {
+    buildDataTopic: (vesselId, deviceId) =>
+      `vessel/${vesselId}/oas/${deviceId}/data`,
+    buildCommandTopic: (vesselId, deviceId) =>
+      `vessel/${vesselId}/oas/${deviceId}/command`
   }
 };
