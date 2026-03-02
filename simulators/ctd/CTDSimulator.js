@@ -11,31 +11,62 @@ const client = mqtt.connect("mqtt://localhost:1883");
 
 let interval = 1000;
 let running = true;
-let depth = 0;
+
+// --- Physical Simulation State ---
+let depth = 20;              // meters
+let maxDepth = 800;          // seabed
+let direction = 1;           // descending or ascending
+let seabed = 900;
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
 
 function generateCTDData() {
-  depth += Math.random() * 2;
 
-  const pressure = +(depth * 0.1).toFixed(2);
-  const waterTemperature = +(20 - depth * 0.02 + Math.random()).toFixed(2);
-  const conductivity = +(3 + Math.random() * 0.5).toFixed(3);
-  const salinity = +(30 + conductivity * 1.5).toFixed(2);
-  const altimeter = +(100 - depth).toFixed(2);
-  const soundVelocity = +(1440 + waterTemperature * 4).toFixed(2);
-  const waterDensity = +(1020 + salinity * 0.2).toFixed(2);
+  // Simulate winch motion
+  depth += direction * (0.5 + Math.random() * 0.5);
+
+  if (depth > maxDepth || depth < 5) {
+    direction *= -1;
+  }
+
+  depth = clamp(depth, 5, maxDepth);
+
+  // Thermocline model
+  const waterTemperature =
+    +(25 - depth * 0.02 + (Math.random() - 0.5) * 0.2).toFixed(2);
+
+  const salinity =
+    +(34.5 + (Math.random() - 0.5) * 0.3).toFixed(2);
+
+  const conductivity =
+    +(4 + (Math.random() - 0.5) * 0.2).toFixed(3);
+
+  const pressure =
+    +(depth * 0.1).toFixed(2);
+
+  const soundVelocity =
+    +(1440 + (4 * waterTemperature) + (1.2 * salinity)).toFixed(2);
+
+  const waterDensity =
+    +(1025 + (salinity - 35) * 0.8 - waterTemperature * 0.2).toFixed(2);
+
+  const altimeter =
+    +(seabed - depth).toFixed(2);
 
   return {
     vesselId,
     deviceId,
     timestamp: Date.now(),
-    pressure,
     depth: +depth.toFixed(2),
-    salinity,
+    pressure,
     waterTemperature,
+    salinity,
     conductivity,
-    altimeter,
     soundVelocity,
-    waterDensity
+    waterDensity,
+    altimeter
   };
 }
 
@@ -50,14 +81,9 @@ client.on("connect", () => {
   }, interval);
 });
 
-client.on("message", (topic, message) => {
+client.on("message", (_, message) => {
   const command = message.toString();
 
   if (command === "START") running = true;
   if (command === "STOP") running = false;
-  if (command === "RESET") depth = 0;
-
-  if (command.startsWith("SET_RATE")) {
-    interval = parseInt(command.split(" ")[1]);
-  }
 });

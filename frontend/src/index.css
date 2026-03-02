@@ -1,68 +1,478 @@
-:root {
-  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
-
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
-
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
-}
-a:hover {
-  color: #535bf2;
-}
+/* =====================================================
+   GLOBAL
+===================================================== */
 
 body {
   margin: 0;
+  font-family: "Segoe UI", sans-serif;
+  background: radial-gradient(circle at 20% 20%, #0b1b2f, #071021 70%);
+  color: #e6f1ff;
+  overflow-x: hidden;
+}
+
+/* =====================================================
+   LAYOUT
+===================================================== */
+
+.bridge-container {
+  padding: 30px;
+  height: calc(100vh - 60px);
   display: flex;
-  place-items: center;
-  min-width: 320px;
-  min-height: 100vh;
+  flex-direction: column;
+  gap: 25px;
 }
 
-h1 {
-  font-size: 3.2em;
-  line-height: 1.1;
+.bridge-main {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr 1fr;
+  gap: 25px;
 }
 
-button {
+/* =====================================================
+   PANEL BASE
+===================================================== */
+
+.heading-panel,
+.center-panel,
+.right-panel,
+.bottom-panel {
+  background: #0c1a2b;
+  border-radius: 18px;
+  border: 1px solid rgba(0, 180, 255, 0.15);
+  box-shadow: 0 0 25px rgba(0, 180, 255, 0.05);
+}
+
+/* =====================================================
+   HEADING INSTRUMENT
+===================================================== */
+
+.heading-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.heading-circle {
+  width: 260px;
+  height: 260px;
+  border-radius: 50%;
+  border: 2px solid #00eaff;
+  position: relative;
+  box-shadow: 0 0 20px rgba(0, 234, 255, 0.2);
+}
+
+.heading-line {
+  width: 4px;
+  height: 110px;
+  background: #00eaff;
+  position: absolute;
+  bottom: 50%;
+  left: 50%;
+  transform-origin: bottom;
+  transition: transform 0.3s ease;
+}
+
+.bearing-mark {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  transform-origin: center;
+}
+
+.bearing-mark span {
+  position: absolute;
+  top: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 10px;
+  color: #00eaff;
+  opacity: 0.8;
+}
+
+.heading-value {
+  margin-top: 18px;
+  font-size: 32px;
+  font-weight: bold;
+  color: #00eaff;
+}
+
+.heading-sub {
+  font-size: 14px;
+  opacity: 0.6;
+}
+
+/* =====================================================
+   CENTER PANEL (SHIP + ENGINES)
+===================================================== */
+
+.center-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  padding: 20px;
+}
+
+.ship-silhouette {
+  position: relative;
+  width: 100px;
+  height: 200px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ship-body {
+  width: 40px;
+  height: 180px;
+  background: linear-gradient(to bottom, #00eaff, #0084b4);
+  border-radius: 20px;
+  box-shadow: 0 0 25px #00eaff;
+}
+
+.ship-heading-line {
+  width: 2px;
+  height: 120px;
+  background: #00eaff;
+  position: absolute;
+  top: 40px;
+  left: 50%;
+  transform-origin: top;
+}
+
+/* =====================================================
+   ENGINE BARS
+===================================================== */
+
+.engine-columns {
+  display: flex;
+  gap: 40px;
+  align-items: flex-end;
+  height: 220px;
+}
+
+.engine-block {
+  width: 70px;
+  height: 220px;
+  border-radius: 10px;
+  background: #081424;
+  border: 1px solid rgba(0, 234, 255, 0.5);
+  overflow: hidden;
+  position: relative;
+}
+
+.engine-fill {
+  width: 100%;
+  background: linear-gradient(to top, #00eaff, #006b91);
+  box-shadow: 0 0 15px rgba(0, 234, 255, 0.6);
+  transition: height 0.4s ease;
+}
+
+.engine-text {
+  position: absolute;
+  bottom: 10px;
+  width: 100%;
+  text-align: center;
+  font-size: 13px;
+  font-weight: bold;
+  color: #00eaff;
+}
+
+/* =====================================================
+   TELEMETRY
+===================================================== */
+
+.right-panel {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.telemetry-line {
+  display: flex;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(0, 180, 255, 0.1);
+  padding-bottom: 6px;
+  font-size: 13px;
+}
+
+.telemetry-line strong {
+  color: #00eaff;
+}
+
+/* Risk */
+
+.risk-badge {
+  margin-top: 8px;
+  padding: 8px;
+  text-align: center;
   border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  background-color: #1a1a1a;
-  cursor: pointer;
-  transition: border-color 0.25s;
-}
-button:hover {
-  border-color: #646cff;
-}
-button:focus,
-button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
+  font-weight: bold;
 }
 
-@media (prefers-color-scheme: light) {
-  :root {
-    color: #213547;
-    background-color: #ffffff;
-  }
-  a:hover {
-    color: #747bff;
-  }
-  button {
-    background-color: #f9f9f9;
-  }
+.risk-badge.low {
+  background: rgba(0, 255, 0, 0.15);
+  color: #00ff99;
+}
+
+.risk-badge.medium {
+  background: rgba(255, 165, 0, 0.15);
+  color: orange;
+}
+
+.risk-badge.high {
+  background: rgba(255, 0, 0, 0.15);
+  color: red;
+}
+
+/* =====================================================
+   BOTTOM SPLIT
+===================================================== */
+
+.bridge-bottom-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 25px;
+}
+
+.bottom-panel {
+  padding: 20px;
+  min-height: 380px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* =====================================================
+   RADAR FIX
+===================================================== */
+
+.radar-wrapper {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* Force radar to be square and centered */
+.radar-container {
+  width: 320px;
+  height: 320px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.radar-circle {
+  width: 280px;
+  height: 280px;
+  border-radius: 50%;
+  border: 2px solid #00eaff;
+  position: relative;
+  background: radial-gradient(circle, #0c1a2b 60%, #081424);
+  overflow: hidden;
+}
+
+.radar-ring {
+  position: absolute;
+  border: 1px solid rgba(0, 234, 255, 0.3);
+  border-radius: 50%;
+}
+
+.ring-1 { width: 70%; height: 70%; top: 15%; left: 15%; }
+.ring-2 { width: 40%; height: 40%; top: 30%; left: 30%; }
+.ring-3 { width: 15%; height: 15%; top: 42.5%; left: 42.5%; }
+
+.radar-sweep {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(to top, rgba(0,234,255,0.2), transparent);
+  position: absolute;
+  animation: radarRotate 4s linear infinite;
+}
+
+@keyframes radarRotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.radar-object {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  position: absolute;
+  transform: translate(-50%, -50%);
+}
+
+.radar-object.warning { background: orange; }
+.radar-object.danger {
+  background: red;
+  box-shadow: 0 0 8px red;
+  animation: flash 0.7s infinite alternate;
+}
+
+@keyframes flash {
+  from { opacity: 1; }
+  to { opacity: 0.3; }
+}
+
+/* =====================================================
+   MAP
+===================================================== */
+
+.bridge-map {
+  width: 100%;
+  height: 350px;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid rgba(0,180,255,0.2);
+  cursor: pointer;
+}
+
+.fullscreen-map-container {
+  position: fixed;
+  inset: 0;
+  background: rgba(5, 15, 25, 0.95);
+  z-index: 2000;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.fullscreen-map {
+  width: 90%;
+  height: 90%;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 2px solid #00eaff;
+  box-shadow: 0 0 40px rgba(0, 234, 255, 0.3);
+}
+
+.fullscreen-close {
+  position: absolute;
+  top: 25px;
+  right: 40px;
+  font-size: 24px;
+  color: #00eaff;
+  cursor: pointer;
+}
+/* =====================================================
+   OAS DASHBOARD
+===================================================== */
+
+.oas-container {
+  padding: 30px;
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+}
+
+.oas-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.oas-header h2 {
+  color: #00eaff;
+  margin: 0;
+}
+
+.oas-risk {
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-weight: bold;
+}
+
+.oas-risk.low {
+  background: rgba(0,255,0,0.15);
+  color: #00ff99;
+}
+
+.oas-risk.medium {
+  background: rgba(255,165,0,0.15);
+  color: orange;
+}
+
+.oas-risk.high {
+  background: rgba(255,0,0,0.15);
+  color: red;
+}
+
+.oas-main {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 30px;
+}
+
+/* SONAR */
+
+.sonar-wrapper {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.sonar-circle {
+  fill: #081424;
+  stroke: #00eaff;
+  stroke-width: 2;
+}
+
+.sonar-ring {
+  fill: none;
+  stroke: rgba(0,234,255,0.3);
+}
+
+.sonar-ship {
+  fill: #00eaff;
+}
+
+.sonar-sweep {
+  stroke: rgba(0,234,255,0.6);
+  stroke-width: 2;
+  animation: sonarRotate 4s linear infinite;
+  transform-origin: 190px 190px;
+}
+
+@keyframes sonarRotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.sonar-object {
+  fill: #ff0040;
+  filter: drop-shadow(0 0 6px red);
+}
+
+.sonar-label {
+  fill: #00eaff;
+  font-size: 11px;
+}
+
+/* METRICS */
+
+.oas-metrics {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.oas-card {
+  background: #0c1a2b;
+  border-radius: 14px;
+  border: 1px solid rgba(0,180,255,0.15);
+  padding: 20px;
+}
+
+.oas-card-label {
+  font-size: 14px;
+  color: #8aa4c8;
+}
+
+.oas-card-value {
+  font-size: 28px;
+  font-weight: bold;
+  color: #00eaff;
 }

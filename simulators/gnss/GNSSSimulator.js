@@ -5,30 +5,31 @@ const vesselId = process.env.VESSEL_ID || "V001";
 const deviceId = process.env.DEVICE_ID || "GNSS01";
 
 const dataTopic = topics.GNSS.buildDataTopic(vesselId, deviceId);
-
 const client = mqtt.connect("mqtt://localhost:1883");
 
-let interval = 1000;
-let running = true;
-
-// Mumbai starting coordinates
 let latitude = 19.0760;
 let longitude = 72.8777;
 
 let heading = 90;
 let speed = 6;
+let turnRate = 0;
 
 function generateGNSSData() {
-  const movementFactor = 0.00015;
 
-  latitude += movementFactor * Math.cos(heading * Math.PI / 180);
-  longitude += movementFactor * Math.sin(heading * Math.PI / 180);
+  // Simulate gentle turning
+  turnRate += (Math.random() - 0.5) * 0.3;
+  heading += turnRate;
 
-  heading += (Math.random() - 0.5) * 4;
   if (heading < 0) heading += 360;
   if (heading > 360) heading -= 360;
 
-  speed = 5 + Math.random() * 2;
+  speed += (Math.random() - 0.5) * 0.2;
+  speed = Math.max(3, Math.min(12, speed));
+
+  const movementFactor = speed * 0.00001;
+
+  latitude += movementFactor * Math.cos(heading * Math.PI / 180);
+  longitude += movementFactor * Math.sin(heading * Math.PI / 180);
 
   return {
     vesselId,
@@ -42,11 +43,8 @@ function generateGNSSData() {
 }
 
 client.on("connect", () => {
-  console.log(`GNSS Simulator ${vesselId}-${deviceId} connected`);
-
+  console.log(`GNSS ${vesselId}-${deviceId} connected`);
   setInterval(() => {
-    if (running) {
-      client.publish(dataTopic, JSON.stringify(generateGNSSData()));
-    }
-  }, interval);
+    client.publish(dataTopic, JSON.stringify(generateGNSSData()));
+  }, 1000);
 });
