@@ -13,8 +13,6 @@ let phase = 0;
 function generateCurrentMeterData() {
 
   phase += 0.05;
-
-  // Simulate tidal sinusoidal current
   const currentSpeed =
     +(1.2 + Math.sin(phase) * 0.8 + (Math.random() - 0.5) * 0.2).toFixed(2);
 

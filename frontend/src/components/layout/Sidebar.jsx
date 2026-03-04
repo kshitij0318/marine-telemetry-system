@@ -1,6 +1,7 @@
 import { NavLink } from "react-router-dom";
 
 function Sidebar() {
+
   const linkStyle = ({ isActive }) => ({
     padding: "12px 16px",
     display: "block",
@@ -28,29 +29,30 @@ function Sidebar() {
         Navigation
       </h3>
 
-      <NavLink to="" end style={linkStyle}>
+      <NavLink to="/" end style={linkStyle}>
         Fleet Overview
       </NavLink>
 
-      <NavLink to="gnss" style={linkStyle}>
+      <NavLink to="/gnss" style={linkStyle}>
         GNSS
       </NavLink>
 
-      <NavLink to="ctd" style={linkStyle}>
+      <NavLink to="/ctd" style={linkStyle}>
         CTD
       </NavLink>
 
-      <NavLink to="current-meter" style={linkStyle}>
+      <NavLink to="/current-meter" style={linkStyle}>
         Current Meter
       </NavLink>
 
-      <NavLink to="thruster" style={linkStyle}>
+      <NavLink to="/thruster" style={linkStyle}>
         Thruster
       </NavLink>
 
-      <NavLink to="oas" style={linkStyle}>
+      <NavLink to="/oas" style={linkStyle}>
         OAS
       </NavLink>
+
     </div>
   );
 }

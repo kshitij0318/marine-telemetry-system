@@ -11,11 +11,9 @@ const client = mqtt.connect("mqtt://localhost:1883");
 
 let interval = 1000;
 let running = true;
-
-// --- Physical Simulation State ---
-let depth = 20;              // meters
-let maxDepth = 800;          // seabed
-let direction = 1;           // descending or ascending
+let depth = 20;             
+let maxDepth = 800;          
+let direction = 1;          
 let seabed = 900;
 
 function clamp(value, min, max) {
@@ -23,38 +21,25 @@ function clamp(value, min, max) {
 }
 
 function generateCTDData() {
-
-  // Simulate winch motion
   depth += direction * (0.5 + Math.random() * 0.5);
-
   if (depth > maxDepth || depth < 5) {
     direction *= -1;
   }
-
   depth = clamp(depth, 5, maxDepth);
-
-  // Thermocline model
   const waterTemperature =
     +(25 - depth * 0.02 + (Math.random() - 0.5) * 0.2).toFixed(2);
-
   const salinity =
     +(34.5 + (Math.random() - 0.5) * 0.3).toFixed(2);
-
   const conductivity =
     +(4 + (Math.random() - 0.5) * 0.2).toFixed(3);
-
   const pressure =
     +(depth * 0.1).toFixed(2);
-
   const soundVelocity =
     +(1440 + (4 * waterTemperature) + (1.2 * salinity)).toFixed(2);
-
   const waterDensity =
     +(1025 + (salinity - 35) * 0.8 - waterTemperature * 0.2).toFixed(2);
-
   const altimeter =
     +(seabed - depth).toFixed(2);
-
   return {
     vesselId,
     deviceId,

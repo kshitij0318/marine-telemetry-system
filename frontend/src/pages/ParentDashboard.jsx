@@ -3,207 +3,430 @@ import VesselMap from "../components/common/VesselMap";
 import OASRadar from "../components/bridge/OASRadar";
 
 function ParentDashboard() {
-  const [vessels, setVessels] = useState({});
-  const [selectedVessel, setSelectedVessel] = useState(null);
-  const [mapExpanded, setMapExpanded] = useState(false);
 
-  const selectedRef = useRef(null);
+const [vessels, setVessels] = useState({});
+const [selectedVessel, setSelectedVessel] = useState(null);
+const [mapExpanded, setMapExpanded] = useState(false);
 
-  useEffect(() => {
-    selectedRef.current = selectedVessel;
-  }, [selectedVessel]);
+/* AIS Trail */
+const [trail, setTrail] = useState([]);
 
-  useEffect(() => {
-    fetch("http://localhost:5000/api/parent")
-      .then(res => res.json())
-      .then(data => {
-        setVessels(data);
-        const ids = Object.keys(data);
-        if (ids.length > 0) setSelectedVessel(ids[0]);
-      });
-  }, []);
+const selectedRef = useRef(null);
 
-  useEffect(() => {
-    const ws = new WebSocket("ws://localhost:5000");
-    ws.onmessage = (event) => {
-      const message = JSON.parse(event.data);
-      if (message.type === "parent-update") {
-        setVessels(prev => ({
-          ...prev,
-          [message.vesselId]: message.data
-        }));
-      }
-    };
-    return () => ws.close();
-  }, []);
+useEffect(() => {
+selectedRef.current = selectedVessel;
+}, [selectedVessel]);
 
-  const data = vessels[selectedVessel];
-  if (!data) return null;
+/* ===============================
+INITIAL FETCH
+================================ */
 
-  return (
-    <div className="bridge-container">
+useEffect(() => {
 
-      {/* =========================
-          TOP GRID (3 PANELS)
-      ========================== */}
-      <div className="bridge-main">
+fetch("http://localhost:5000/api/parent")
+.then(res => res.json())
+.then(data => {
 
-        {/* HEADING */}
-        <div className="heading-panel">
-          <div className="heading-circle">
-            {Array.from({ length: 12 }).map((_, i) => (
-              <div
-                key={i}
-                className="bearing-mark"
-                style={{ transform: `rotate(${i * 30}deg)` }}
-              >
-                <span>{i * 30}</span>
-              </div>
-            ))}
+setVessels(data);
 
-            <div
-              className="heading-line"
-              style={{ transform: `rotate(${data.heading ?? 0}deg)` }}
-            />
-          </div>
+const ids = Object.keys(data);
 
-          <div className="heading-value">
-            {data.heading?.toFixed(1)}°
-          </div>
+if (ids.length > 0) setSelectedVessel(ids[0]);
 
-          <div className="heading-sub">
-            {getCardinal(data.heading)}
-          </div>
-        </div>
+});
 
-        {/* PROPULSION */}
-        <div className="center-panel">
+}, []);
 
-          <div className="ship-silhouette">
-            <div className="ship-body" />
-            <div
-              className="ship-heading-line"
-              style={{ transform: `rotate(${data.heading ?? 0}deg)` }}
-            />
-          </div>
+/* ===============================
+WEBSOCKET LIVE DATA
+================================ */
 
-          <div className="engine-columns">
-            <EngineBar
-              label="RPM"
-              value={data.rpm}
-              percentage={Math.min(100, (data.rpm ?? 0) / 40)}
-            />
+useEffect(() => {
 
-            <EngineBar
-              label="Thrust"
-              value={`${data.thrustPower ?? 0}%`}
-              percentage={data.thrustPower ?? 0}
-            />
-          </div>
-        </div>
+const ws = new WebSocket("ws://localhost:5000");
 
-        {/* TELEMETRY ONLY */}
-        <div className="right-panel">
-          <Telemetry label="Speed" value={`${data.speed?.toFixed(2)} kn`} />
-          <Telemetry label="Depth" value={`${data.depth?.toFixed(2)} m`} />
-          <Telemetry label="Temp" value={`${data.waterTemperature?.toFixed(2)} °C`} />
-          <Telemetry label="Current" value={`${data.currentSpeed?.toFixed(2)} m/s`} />
-          <Telemetry label="Direction" value={`${data.currentDirection?.toFixed(1)}°`} />
-          <Telemetry label="Salinity" value={`${data.salinity?.toFixed(2)} PSU`} />
+ws.onmessage = (event) => {
 
-          <div className={`risk-badge ${data.riskLevel?.toLowerCase()}`}>
-            {data.riskLevel}
-          </div>
-        </div>
+const message = JSON.parse(event.data);
 
-      </div>
+if (message.type === "parent-update") {
 
-      {/* =========================
-          BOTTOM SPLIT SECTION
-      ========================== */}
-      <div className="bridge-bottom-split">
+setVessels(prev => ({
+...prev,
+[message.vesselId]: message.data
+}));
 
-        {/* GNSS MAP (LEFT) */}
-        <div className="bottom-panel">
-          <div
-            className="bridge-map"
-            onClick={() => setMapExpanded(true)}
-          >
-            <VesselMap
-              latitude={data.latitude}
-              longitude={data.longitude}
-              heading={data.heading}
-              height={350}
-            />
-          </div>
-        </div>
+const vessel = message.data;
 
-        {/* OAS RADAR (RIGHT) */}
-        <div className="bottom-panel radar-wrapper">
-          <OASRadar
-            heading={data.heading}
-            obstacles={[
-              { distance: Math.min(40, data.forwardDistance / 5), angle: 0 },
-              { distance: Math.min(40, data.portDistance / 5), angle: 270 },
-              { distance: Math.min(40, data.starboardDistance / 5), angle: 90 }
-            ]}
-          />
-        </div>
+if (vessel.latitude && vessel.longitude) {
 
-      </div>
+setTrail(prev => {
 
-      {/* FULLSCREEN MAP */}
-      {mapExpanded && (
-        <div
-          className="fullscreen-map-container"
-          onClick={() => setMapExpanded(false)}
-        >
-          <div
-            className="fullscreen-map"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <VesselMap
-              latitude={data.latitude}
-              longitude={data.longitude}
-              heading={data.heading}
-              height="100%"
-            />
-          </div>
+const newTrail = [
+...prev,
+[vessel.latitude, vessel.longitude]
+];
 
-          <div className="fullscreen-close">✕</div>
-        </div>
-      )}
+return newTrail.slice(-60);
 
-    </div>
-  );
+});
+
 }
+
+}
+
+};
+
+return () => ws.close();
+
+}, []);
+
+/* ===============================
+DATA
+================================ */
+
+const data = vessels[selectedVessel];
+if (!data) return null;
+
+/* ===============================
+SAFE FORMATTERS
+================================ */
+
+const safe = (v, digits = 2) =>
+v !== undefined && v !== null ? Number(v).toFixed(digits) : "--";
+
+/* ===============================
+RADAR OBSTACLE CALCULATION
+================================ */
+
+const obstacles = [
+{
+distance: Math.min(40, ((data.forwardDistance ?? 0) / 5)),
+angle: 0
+},
+{
+distance: Math.min(40, ((data.portDistance ?? 0) / 5)),
+angle: 270
+},
+{
+distance: Math.min(40, ((data.starboardDistance ?? 0) / 5)),
+angle: 90
+}
+];
+
+/* ===============================
+UI
+================================ */
+
+return (
+
+<div className="bridge-container">
+
+{/* TOP SECTION */}
+
+<div className="bridge-top-grid">
+
+{/* VEHICLE STATUS PANEL */}
+
+<div className="vehicle-status-panel">
+
+<h3 className="panel-title">Vehicle Status</h3>
+
+<div className="status-grid">
+
+<StatusTile label="Latitude" value={safe(data.latitude,5)} />
+<StatusTile label="Longitude" value={safe(data.longitude,5)} />
+
+<StatusTile label="Speed" value={`${safe(data.speed)} kn`} />
+<StatusTile label="Depth" value={`${safe(data.depth)} m`} />
+
+<StatusTile label="Current Speed" value={`${safe(data.currentSpeed)} m/s`} />
+<StatusTile label="Current Dir" value={`${safe(data.currentDirection,1)}°`} />
+
+<StatusTile label="Water Temp" value={`${safe(data.waterTemperature)} °C`} />
+<StatusTile label="Salinity" value={`${safe(data.salinity)} PSU`} />
+
+</div>
+
+<div className={`risk-badge ${data.riskLevel?.toLowerCase()}`}>
+{data.riskLevel}
+</div>
+
+</div>
+
+{/* NAVIGATION DIAL */}
+
+<div className="navigation-dial-panel">
+
+<MultiAxisDial
+heading={data.heading}
+roll={data.roll}
+pitch={data.pitch}
+yaw={data.yaw}
+/>
+
+</div>
+
+{/* PROPULSION */}
+
+<div className="propulsion-panel">
+
+<h3 className="panel-title">Propulsion Control</h3>
+
+<div className="propulsion-visual">
+
+<div className="ship-orientation">
+
+<div className="ship-body" />
+
+<div
+className="ship-heading-line"
+style={{ transform: `rotate(${data.heading ?? 0}deg)` }}
+/>
+
+</div>
+
+</div>
+
+<div className="propulsion-gauges">
+
+<EngineBar
+label="RPM"
+value={`${safe(data.rpm)} rpm`}
+percentage={Math.min(100,(data.rpm ?? 0)/40)}
+/>
+
+<EngineBar
+label="Thrust"
+value={`${data.thrustPower ?? 0}%`}
+percentage={data.thrustPower ?? 0}
+/>
+
+</div>
+
+<div className="propulsion-metrics">
+
+<div className="propulsion-metric">
+<span>Engine Status</span>
+<strong>{data.thrusterStatus || "Active"}</strong>
+</div>
+
+<div className="propulsion-metric">
+<span>Temperature</span>
+<strong>{safe(data.thrusterTemperature)} °C</strong>
+</div>
+
+</div>
+
+</div>
+
+</div>
+
+{/* BOTTOM SECTION */}
+
+<div className="bridge-bottom-split">
+
+{/* MAP PANEL */}
+
+<div className="bottom-panel">
+
+<div
+className="bridge-map"
+onClick={() => setMapExpanded(true)}
+>
+
+<VesselMap
+latitude={data.latitude}
+longitude={data.longitude}
+heading={data.heading}
+speed={data.speed}
+depth={data.depth}
+trail={trail}
+height={350}
+/>
+
+</div>
+
+</div>
+
+{/* RADAR PANEL */}
+
+<div className="bottom-panel radar-panel">
+
+<h3>Obstacle Radar</h3>
+
+<OASRadar
+heading={data.heading}
+obstacles={obstacles}
+/>
+
+</div>
+
+</div>
+
+{/* FULLSCREEN MAP */}
+
+{mapExpanded && (
+
+<div
+className="fullscreen-map-container"
+onClick={() => setMapExpanded(false)}
+>
+
+<div
+className="fullscreen-map"
+onClick={(e)=>e.stopPropagation()}
+>
+
+<VesselMap
+latitude={data.latitude}
+longitude={data.longitude}
+heading={data.heading}
+speed={data.speed}
+depth={data.depth}
+trail={trail}
+height="100%"
+/>
+
+</div>
+
+<div className="fullscreen-close">✕</div>
+
+</div>
+
+)}
+
+</div>
+
+);
+
+}
+
+/* ===============================
+NAVIGATION DIAL
+================================ */
+
+function MultiAxisDial({ heading = 0, roll, pitch, yaw }) {
+
+const safe = (v)=>v!==undefined&&v!==null?Number(v).toFixed(1):"--";
+
+return (
+
+<div className="nav-instrument">
+
+<div className="nav-dial">
+
+{Array.from({ length: 36 }).map((_, i) => {
+
+const angle = i * 10;
+const major = angle % 30 === 0;
+
+return (
+<div
+key={i}
+className={`tick ${major ? "major" : ""}`}
+style={{ transform: `rotate(${angle}deg)` }}
+>
+{major && <span>{angle}</span>}
+</div>
+);
+
+})}
+
+<div
+className="dial-needle"
+style={{ transform: `rotate(${heading}deg)` }}
+/>
+
+<div className="dial-center">
+
+<div className="dial-heading-value">
+{safe(heading)}°
+</div>
+
+<div className="dial-heading-label">
+Heading
+</div>
+
+</div>
+
+</div>
+
+<div className="nav-telemetry">
+
+<div>
+<span>Roll</span>
+<strong>{safe(roll)}°</strong>
+</div>
+
+<div>
+<span>Pitch</span>
+<strong>{safe(pitch)}°</strong>
+</div>
+
+<div>
+<span>Yaw</span>
+<strong>{safe(yaw)}°</strong>
+</div>
+
+</div>
+
+</div>
+
+);
+
+}
+
+/* ===============================
+STATUS TILE
+================================ */
+
+function StatusTile({ label, value }) {
+
+return (
+<div className="status-tile">
+<span>{label}</span>
+<strong>{value ?? "--"}</strong>
+</div>
+);
+
+}
+
+/* ===============================
+ENGINE GAUGE
+================================ */
 
 function EngineBar({ label, value, percentage }) {
-  return (
-    <div className="engine-block">
-      <div
-        className="engine-fill"
-        style={{ height: `${percentage}%` }}
-      />
-      <div className="engine-text">
-        {label} {value}
-      </div>
-    </div>
-  );
-}
 
-function Telemetry({ label, value }) {
-  return (
-    <div className="telemetry-line">
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </div>
-  );
-}
+return (
 
-function getCardinal(deg = 0) {
-  const dirs = ["N","NE","E","SE","S","SW","W","NW"];
-  return dirs[Math.round(deg / 45) % 8];
+<div className="engine-gauge">
+
+<div className="engine-track">
+
+<div
+className="engine-fill"
+style={{ height: `${percentage}%` }}
+/>
+
+</div>
+
+<div className="engine-label">
+
+<div className="engine-name">
+{label}
+</div>
+
+<div className="engine-value">
+{value}
+</div>
+
+</div>
+
+</div>
+
+);
+
 }
 
 export default ParentDashboard;

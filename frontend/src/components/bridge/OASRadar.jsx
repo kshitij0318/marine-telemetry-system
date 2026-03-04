@@ -5,7 +5,7 @@ function OASRadar({ obstacles = [], heading = 0 }) {
   const radarObjects = useMemo(() => {
     return obstacles.map((obj, i) => {
       const rad = (obj.angle * Math.PI) / 180;
-      const r = obj.distance; // percentage 0–40
+      const r = obj.distance; 
       const x = 50 + r * Math.cos(rad);
       const y = 50 + r * Math.sin(rad);
 
@@ -17,12 +17,10 @@ function OASRadar({ obstacles = [], heading = 0 }) {
     <div className="radar-container">
       <div className="radar-circle">
 
-        {/* RANGE RINGS */}
         <div className="radar-ring ring-1" />
         <div className="radar-ring ring-2" />
         <div className="radar-ring ring-3" />
 
-        {/* BEARING MARKS */}
         {Array.from({ length: 12 }).map((_, i) => (
           <div
             key={i}
@@ -35,10 +33,8 @@ function OASRadar({ obstacles = [], heading = 0 }) {
           </div>
         ))}
 
-        {/* SWEEP */}
         <div className="radar-sweep" />
 
-        {/* OBSTACLES */}
         {radarObjects.map(obj => (
           <div
             key={obj.id}

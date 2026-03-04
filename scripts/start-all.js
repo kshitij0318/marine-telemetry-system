@@ -13,20 +13,11 @@ function runProcess(name, command, args, env = {}) {
   });
 }
 
-/* ===========================
-   START BACKEND
-=========================== */
-
 runProcess(
   "Backend",
   "node",
   [path.join(__dirname, "../backend/server.js")]
 );
-
-/* ===========================
-   START SIMULATORS
-=========================== */
-
 runProcess(
   "CTD Simulator",
   "node",

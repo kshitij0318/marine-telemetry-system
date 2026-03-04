@@ -15,8 +15,6 @@ let speed = 6;
 let turnRate = 0;
 
 function generateGNSSData() {
-
-  // Simulate gentle turning
   turnRate += (Math.random() - 0.5) * 0.3;
   heading += turnRate;
 

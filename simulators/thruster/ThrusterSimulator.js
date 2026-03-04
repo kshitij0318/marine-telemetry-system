@@ -12,17 +12,12 @@ let temperature = 45;
 let running = true;
 
 function generateThrusterData() {
-
   rpm += (Math.random() - 0.5) * 80;
   rpm = Math.max(500, Math.min(2200, rpm));
-
   const thrustPower =
     +(rpm / 2200 * 100).toFixed(1);
-
-  // Thermal model
   temperature += (thrustPower * 0.02) - 0.5;
   temperature = Math.max(35, Math.min(95, temperature));
-
   return {
     vesselId,
     deviceId,
@@ -33,7 +28,6 @@ function generateThrusterData() {
     thrusterStatus: rpm > 700 ? "ACTIVE" : "IDLE"
   };
 }
-
 client.on("connect", () => {
   console.log(`Thruster ${vesselId}-${deviceId} connected`);
   setInterval(() => {

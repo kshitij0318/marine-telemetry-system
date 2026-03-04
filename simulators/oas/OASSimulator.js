@@ -10,20 +10,14 @@ const client = mqtt.connect("mqtt://localhost:1883");
 
 let running = true;
 let interval = 1000;
-
-// Realistic sonar-like ranges (meters)
 let forwardDistance = 120;
 let portDistance = 80;
 let starboardDistance = 95;
 
 function generateOASData() {
-
-  // Smooth fluctuation
   forwardDistance += (Math.random() - 0.5) * 5;
   portDistance += (Math.random() - 0.5) * 4;
   starboardDistance += (Math.random() - 0.5) * 4;
-
-  // Clamp realistic ranges
   forwardDistance = Math.max(10, Math.min(200, forwardDistance));
   portDistance = Math.max(5, Math.min(150, portDistance));
   starboardDistance = Math.max(5, Math.min(150, starboardDistance));

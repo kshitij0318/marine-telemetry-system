@@ -51,13 +51,9 @@ function OASDashboard() {
       </div>
 
       <div className="oas-main">
-
-        {/* SONAR DISPLAY */}
         <div className="sonar-panel">
           <SonarRadar obstacles={obstacles} />
         </div>
-
-        {/* DATA PANEL */}
         <div className="oas-metrics">
           <Metric label="Forward" value={latest.forwardDistance} unit="m" />
           <Metric label="Port" value={latest.portDistance} unit="m" />
@@ -69,9 +65,7 @@ function OASDashboard() {
   );
 }
 
-/* ================================
-   SONAR RADAR COMPONENT
-================================ */
+
 
 function SonarRadar({ obstacles }) {
 
@@ -82,26 +76,18 @@ function SonarRadar({ obstacles }) {
   return (
     <div className="sonar-wrapper">
       <svg width={size} height={size}>
-
-        {/* Outer Circle */}
         <circle
           cx={center}
           cy={center}
           r={150}
           className="sonar-circle"
         />
-
-        {/* Range Rings */}
         <circle cx={center} cy={center} r={100} className="sonar-ring" />
         <circle cx={center} cy={center} r={50} className="sonar-ring" />
-
-        {/* Ship */}
         <polygon
           points={`${center},${center - 20} ${center - 8},${center + 15} ${center + 8},${center + 15}`}
           className="sonar-ship"
         />
-
-        {/* Sweep */}
         <line
           x1={center}
           y1={center}
@@ -109,8 +95,6 @@ function SonarRadar({ obstacles }) {
           y2={center - 150}
           className="sonar-sweep"
         />
-
-        {/* Obstacles */}
         {obstacles.map((o, i) => {
           const angleRad = (o.angle - 90) * (Math.PI / 180);
           const radius = (o.distance / 200) * maxRadius;
