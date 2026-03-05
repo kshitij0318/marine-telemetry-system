@@ -76,9 +76,6 @@ return (
   </div>
 
   <div className="gnss-main">
-
-    {/* COMPASS */}
-
     <div className="gnss-compass">
 
       <div className="compass-circle">
@@ -105,9 +102,6 @@ return (
       </div>
 
     </div>
-
-    {/* MAP */}
-
     <div className="gnss-map">
 
       <VesselMap
@@ -121,9 +115,6 @@ return (
       />
 
     </div>
-
-    {/* SPEED GAUGE */}
-
     <div className="gnss-speed-panel">
 
       <div className="speed-gauge">
@@ -144,9 +135,6 @@ return (
     </div>
 
   </div>
-
-  {/* SPEED CHART */}
-
   <div className="gnss-chart">
 
     <Line

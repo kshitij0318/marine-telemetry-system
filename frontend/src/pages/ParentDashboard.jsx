@@ -1,72 +1,54 @@
 import { useEffect, useState, useRef } from "react";
 import VesselMap from "../components/common/VesselMap";
-import OASRadar from "../components/bridge/OASRadar";
 
 function ParentDashboard() {
 
 const [vessels, setVessels] = useState({});
 const [selectedVessel, setSelectedVessel] = useState(null);
 const [mapExpanded, setMapExpanded] = useState(false);
-
-/* AIS Trail */
 const [trail, setTrail] = useState([]);
 
 const selectedRef = useRef(null);
 
-useEffect(() => {
+useEffect(()=>{
 selectedRef.current = selectedVessel;
-}, [selectedVessel]);
-
-/* ===============================
-INITIAL FETCH
-================================ */
-
-useEffect(() => {
+},[selectedVessel]);
+useEffect(()=>{
 
 fetch("http://localhost:5000/api/parent")
-.then(res => res.json())
-.then(data => {
+.then(res=>res.json())
+.then(data=>{
 
 setVessels(data);
 
 const ids = Object.keys(data);
-
-if (ids.length > 0) setSelectedVessel(ids[0]);
+if(ids.length>0) setSelectedVessel(ids[0]);
 
 });
 
-}, []);
-
-/* ===============================
-WEBSOCKET LIVE DATA
-================================ */
-
-useEffect(() => {
+},[]);
+useEffect(()=>{
 
 const ws = new WebSocket("ws://localhost:5000");
 
-ws.onmessage = (event) => {
+ws.onmessage = (event)=>{
 
 const message = JSON.parse(event.data);
 
-if (message.type === "parent-update") {
+if(message.type==="parent-update"){
 
-setVessels(prev => ({
+setVessels(prev=>({
 ...prev,
-[message.vesselId]: message.data
+[message.vesselId]:message.data
 }));
 
 const vessel = message.data;
 
-if (vessel.latitude && vessel.longitude) {
+if(vessel.latitude && vessel.longitude){
 
-setTrail(prev => {
+setTrail(prev=>{
 
-const newTrail = [
-...prev,
-[vessel.latitude, vessel.longitude]
-];
-
+const newTrail=[...prev,[vessel.latitude,vessel.longitude]];
 return newTrail.slice(-60);
 
 });
@@ -77,56 +59,34 @@ return newTrail.slice(-60);
 
 };
 
-return () => ws.close();
+return ()=>ws.close();
 
-}, []);
-
-/* ===============================
-DATA
-================================ */
+},[]);
 
 const data = vessels[selectedVessel];
-if (!data) return null;
-
-/* ===============================
-SAFE FORMATTERS
-================================ */
-
-const safe = (v, digits = 2) =>
-v !== undefined && v !== null ? Number(v).toFixed(digits) : "--";
-
-/* ===============================
-RADAR OBSTACLE CALCULATION
-================================ */
-
-const obstacles = [
+if(!data) return null;
+const safe=(v,d=2)=>v!==undefined&&v!==null?Number(v).toFixed(d):"--";
+const obstacles=[
 {
-distance: Math.min(40, ((data.forwardDistance ?? 0) / 5)),
-angle: 0
+distance:Math.min(100,data.forwardDistance ?? 0),
+angle:0,
+label:`${data.forwardDistance ?? "--"}m`
 },
 {
-distance: Math.min(40, ((data.portDistance ?? 0) / 5)),
-angle: 270
+distance:Math.min(100,data.portDistance ?? 0),
+angle:270,
+label:`${data.portDistance ?? "--"}m`
 },
 {
-distance: Math.min(40, ((data.starboardDistance ?? 0) / 5)),
-angle: 90
+distance:Math.min(100,data.starboardDistance ?? 0),
+angle:90,
+label:`${data.starboardDistance ?? "--"}m`
 }
 ];
-
-/* ===============================
-UI
-================================ */
-
-return (
+return(
 
 <div className="bridge-container">
-
-{/* TOP SECTION */}
-
 <div className="bridge-top-grid">
-
-{/* VEHICLE STATUS PANEL */}
 
 <div className="vehicle-status-panel">
 
@@ -154,8 +114,6 @@ return (
 
 </div>
 
-{/* NAVIGATION DIAL */}
-
 <div className="navigation-dial-panel">
 
 <MultiAxisDial
@@ -167,8 +125,6 @@ yaw={data.yaw}
 
 </div>
 
-{/* PROPULSION */}
-
 <div className="propulsion-panel">
 
 <h3 className="panel-title">Propulsion Control</h3>
@@ -177,11 +133,11 @@ yaw={data.yaw}
 
 <div className="ship-orientation">
 
-<div className="ship-body" />
+<div className="ship-body"/>
 
 <div
 className="ship-heading-line"
-style={{ transform: `rotate(${data.heading ?? 0}deg)` }}
+style={{transform:`rotate(${data.heading ?? 0}deg)`}}
 />
 
 </div>
@@ -222,17 +178,14 @@ percentage={data.thrustPower ?? 0}
 
 </div>
 
-{/* BOTTOM SECTION */}
-
 <div className="bridge-bottom-split">
 
-{/* MAP PANEL */}
 
 <div className="bottom-panel">
 
 <div
 className="bridge-map"
-onClick={() => setMapExpanded(true)}
+onClick={()=>setMapExpanded(true)}
 >
 
 <VesselMap
@@ -249,28 +202,21 @@ height={350}
 
 </div>
 
-{/* RADAR PANEL */}
-
 <div className="bottom-panel radar-panel">
 
 <h3>Obstacle Radar</h3>
 
-<OASRadar
-heading={data.heading}
-obstacles={obstacles}
-/>
+<SonarRadar obstacles={obstacles}/>
 
 </div>
 
 </div>
 
-{/* FULLSCREEN MAP */}
-
-{mapExpanded && (
+{mapExpanded &&(
 
 <div
 className="fullscreen-map-container"
-onClick={() => setMapExpanded(false)}
+onClick={()=>setMapExpanded(false)}
 >
 
 <div
@@ -301,31 +247,98 @@ height="100%"
 );
 
 }
+function SonarRadar({obstacles}){
 
-/* ===============================
-NAVIGATION DIAL
-================================ */
+const size=320;
+const center=size/2;
+const maxRadius=140;
 
-function MultiAxisDial({ heading = 0, roll, pitch, yaw }) {
+return(
 
-const safe = (v)=>v!==undefined&&v!==null?Number(v).toFixed(1):"--";
+<div className="sonar-wrapper">
 
-return (
+<svg width={size} height={size}>
+
+<circle cx={center} cy={center} r={140} className="sonar-circle"/>
+<circle cx={center} cy={center} r={95} className="sonar-ring"/>
+<circle cx={center} cy={center} r={50} className="sonar-ring"/>
+
+<polygon
+points={`${center},${center-18} ${center-8},${center+14} ${center+8},${center+14}`}
+className="sonar-ship"
+/>
+
+<line
+x1={center}
+y1={center}
+x2={center}
+y2={center-140}
+className="sonar-sweep"
+/>
+
+{obstacles.map((o,i)=>{
+
+const angleRad=(o.angle-90)*(Math.PI/180);
+const radius=(o.distance/200)*maxRadius;
+
+const x=center+radius*Math.cos(angleRad);
+const y=center+radius*Math.sin(angleRad);
+
+const size=Math.max(4,14-(o.distance/10));
+
+return(
+
+<g key={i}>
+
+<circle
+cx={x}
+cy={y}
+r={size}
+className="sonar-object"
+/>
+
+<text
+x={x}
+y={y-12}
+textAnchor="middle"
+className="sonar-label"
+>
+{o.label}
+</text>
+
+</g>
+
+);
+
+})}
+
+</svg>
+
+</div>
+
+);
+
+}
+function MultiAxisDial({heading=0,roll,pitch,yaw}){
+
+const safe=(v)=>v!==undefined&&v!==null?Number(v).toFixed(1):"--";
+
+return(
 
 <div className="nav-instrument">
 
 <div className="nav-dial">
 
-{Array.from({ length: 36 }).map((_, i) => {
+{Array.from({length:36}).map((_,i)=>{
 
-const angle = i * 10;
-const major = angle % 30 === 0;
+const angle=i*10;
+const major=angle%30===0;
 
-return (
+return(
 <div
 key={i}
-className={`tick ${major ? "major" : ""}`}
-style={{ transform: `rotate(${angle}deg)` }}
+className={`tick ${major?"major":""}`}
+style={{transform:`rotate(${angle}deg)`}}
 >
 {major && <span>{angle}</span>}
 </div>
@@ -335,7 +348,7 @@ style={{ transform: `rotate(${angle}deg)` }}
 
 <div
 className="dial-needle"
-style={{ transform: `rotate(${heading}deg)` }}
+style={{transform:`rotate(${heading}deg)`}}
 />
 
 <div className="dial-center">
@@ -354,20 +367,9 @@ Heading
 
 <div className="nav-telemetry">
 
-<div>
-<span>Roll</span>
-<strong>{safe(roll)}°</strong>
-</div>
-
-<div>
-<span>Pitch</span>
-<strong>{safe(pitch)}°</strong>
-</div>
-
-<div>
-<span>Yaw</span>
-<strong>{safe(yaw)}°</strong>
-</div>
+<div><span>Roll</span><strong>{safe(roll)}°</strong></div>
+<div><span>Pitch</span><strong>{safe(pitch)}°</strong></div>
+<div><span>Yaw</span><strong>{safe(yaw)}°</strong></div>
 
 </div>
 
@@ -376,14 +378,9 @@ Heading
 );
 
 }
+function StatusTile({label,value}){
 
-/* ===============================
-STATUS TILE
-================================ */
-
-function StatusTile({ label, value }) {
-
-return (
+return(
 <div className="status-tile">
 <span>{label}</span>
 <strong>{value ?? "--"}</strong>
@@ -391,14 +388,9 @@ return (
 );
 
 }
+function EngineBar({label,value,percentage}){
 
-/* ===============================
-ENGINE GAUGE
-================================ */
-
-function EngineBar({ label, value, percentage }) {
-
-return (
+return(
 
 <div className="engine-gauge">
 
@@ -406,20 +398,15 @@ return (
 
 <div
 className="engine-fill"
-style={{ height: `${percentage}%` }}
+style={{height:`${percentage}%`}}
 />
 
 </div>
 
 <div className="engine-label">
 
-<div className="engine-name">
-{label}
-</div>
-
-<div className="engine-value">
-{value}
-</div>
+<div className="engine-name">{label}</div>
+<div className="engine-value">{value}</div>
 
 </div>
 

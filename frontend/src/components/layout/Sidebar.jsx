@@ -1,60 +1,125 @@
 import { NavLink } from "react-router-dom";
+import { useEffect, useState } from "react";
 
 function Sidebar() {
 
-  const linkStyle = ({ isActive }) => ({
-    padding: "12px 16px",
-    display: "block",
-    color: isActive ? "#00b4ff" : "#8aa4c8",
-    textDecoration: "none",
-    background: isActive ? "rgba(0,180,255,0.08)" : "transparent",
-    borderRadius: 10,
-    marginBottom: 10,
-    border: isActive
-      ? "1px solid rgba(0,180,255,0.4)"
-      : "1px solid transparent",
-    transition: "0.2s"
-  });
+const [sensors, setSensors] = useState({
+GNSS:false,
+CTD:false,
+CURRENTMETER:false,
+THRUSTER:false,
+OAS:false
+});
 
-  return (
-    <div
-      style={{
-        width: 240,
-        padding: 25,
-        background: "#071021",
-        borderRight: "1px solid rgba(0,180,255,0.1)"
-      }}
-    >
-      <h3 style={{ color: "#00b4ff", marginBottom: 20 }}>
-        Navigation
-      </h3>
+useEffect(()=>{
 
-      <NavLink to="/" end style={linkStyle}>
-        Fleet Overview
-      </NavLink>
+const ws = new WebSocket("ws://localhost:5000");
 
-      <NavLink to="/gnss" style={linkStyle}>
-        GNSS
-      </NavLink>
+ws.onmessage = (event)=>{
 
-      <NavLink to="/ctd" style={linkStyle}>
-        CTD
-      </NavLink>
+const message = JSON.parse(event.data);
 
-      <NavLink to="/current-meter" style={linkStyle}>
-        Current Meter
-      </NavLink>
+if(message.type === "parent-update"){
 
-      <NavLink to="/thruster" style={linkStyle}>
-        Thruster
-      </NavLink>
+const v = message.data;
 
-      <NavLink to="/oas" style={linkStyle}>
-        OAS
-      </NavLink>
+setSensors({
+GNSS: v.latitude !== null && v.latitude !== undefined,
+CTD: v.waterTemperature !== null && v.waterTemperature !== undefined,
+CURRENTMETER: v.currentSpeed !== null && v.currentSpeed !== undefined,
+THRUSTER: v.rpm !== null && v.rpm !== undefined,
+OAS: v.forwardDistance !== null && v.forwardDistance !== undefined
+});
 
-    </div>
-  );
+}
+
+};
+
+return ()=>ws.close();
+
+},[]);
+
+const linkStyle = ({ isActive }) => ({
+padding:"12px 16px",
+display:"flex",
+alignItems:"center",
+gap:10,
+color:isActive ? "#00eaff" : "#8aa4c8",
+textDecoration:"none",
+background:isActive ? "rgba(0,180,255,0.08)" : "transparent",
+borderRadius:10,
+marginBottom:8,
+border:isActive
+? "1px solid rgba(0,180,255,0.4)"
+: "1px solid transparent",
+transition:"0.2s"
+});
+
+return (
+
+<div className="sidebar">
+
+<div className="sidebar-title">
+Marine Telemetry
+</div>
+
+<div className="sidebar-section">
+SYSTEM STATUS
+</div>
+
+<SensorStatus label="GNSS" active={sensors.GNSS}/>
+<SensorStatus label="CTD" active={sensors.CTD}/>
+<SensorStatus label="Current Meter" active={sensors.CURRENTMETER}/>
+<SensorStatus label="Thruster" active={sensors.THRUSTER}/>
+<SensorStatus label="OAS" active={sensors.OAS}/>
+
+<div className="sidebar-section">
+NAVIGATION
+</div>
+
+<NavLink to="/" end style={linkStyle}>
+Fleet Overview
+</NavLink>
+
+<NavLink to="/gnss" style={linkStyle}>
+GNSS
+</NavLink>
+
+<NavLink to="/ctd" style={linkStyle}>
+CTD
+</NavLink>
+
+<NavLink to="/current-meter" style={linkStyle}>
+Current Meter
+</NavLink>
+
+<NavLink to="/thruster" style={linkStyle}>
+Thruster
+</NavLink>
+
+<NavLink to="/oas" style={linkStyle}>
+OAS
+</NavLink>
+
+</div>
+
+);
+
+}
+function SensorStatus({ label, active }){
+
+return(
+
+<div className="sensor-row">
+
+<div className={`sensor-led ${active ? "active" : "inactive"}`} />
+
+<span>{label}</span>
+
+</div>
+
+);
+
 }
 
 export default Sidebar;

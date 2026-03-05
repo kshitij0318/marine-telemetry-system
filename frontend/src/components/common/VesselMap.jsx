@@ -11,11 +11,6 @@ import { useEffect } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "leaflet-rotatedmarker";
-
-/* ===============================
-SHIP ICON
-================================ */
-
 const shipSVG = `
 <div style="width:60px;height:60px;display:flex;align-items:center;justify-content:center;filter:drop-shadow(0px 0px 10px #00eaff);">
 <svg width="40" height="40" viewBox="0 0 60 60">
@@ -30,11 +25,6 @@ const shipIcon = new L.DivIcon({
   iconSize: [60, 60],
   iconAnchor: [30, 30]
 });
-
-/* ===============================
-MAP RECENTER
-================================ */
-
 function RecenterMap({ lat, lon }) {
   const map = useMap();
 
@@ -46,11 +36,6 @@ function RecenterMap({ lat, lon }) {
 
   return null;
 }
-
-/* ===============================
-MAIN MAP
-================================ */
-
 function VesselMap({
   latitude,
   longitude,
@@ -79,11 +64,6 @@ function VesselMap({
       </div>
     );
   }
-
-  /* ===============================
-  AIS TRAIL SEGMENTS
-  ================================ */
-
   const trailSegments = [];
 
   for (let i = 1; i < trail.length; i++) {
@@ -119,8 +99,6 @@ function VesselMap({
       />
 
       <RecenterMap lat={latitude} lon={longitude} />
-
-      {/* Vessel Focus Halo */}
       <CircleMarker
         center={[latitude, longitude]}
         radius={18}
@@ -130,11 +108,7 @@ function VesselMap({
           fillOpacity: 0.15
         }}
       />
-
-      {/* AIS STYLE TRAIL */}
       {trailSegments}
-
-      {/* Vessel Marker + HUD */}
       <Marker
         position={[latitude, longitude]}
         icon={shipIcon}
