@@ -13,6 +13,8 @@ let longitude = 72.8777;
 let heading = 90;
 let speed = 6;
 let turnRate = 0;
+let altitude = 15.0; // Base altitude
+let satellites = 12; // Base satellite count
 
 function generateGNSSData() {
   turnRate += (Math.random() - 0.5) * 0.3;
@@ -29,6 +31,15 @@ function generateGNSSData() {
   latitude += movementFactor * Math.cos(heading * Math.PI / 180);
   longitude += movementFactor * Math.sin(heading * Math.PI / 180);
 
+  // Slight fluctuations in altitude and satellites
+  altitude += (Math.random() - 0.5) * 0.5;
+  altitude = Math.max(0, Math.min(50, altitude));
+
+  if (Math.random() > 0.9) {
+    satellites += (Math.random() > 0.5 ? 1 : -1);
+    satellites = Math.max(4, Math.min(24, satellites));
+  }
+
   return {
     vesselId,
     deviceId,
@@ -36,7 +47,9 @@ function generateGNSSData() {
     latitude: +latitude.toFixed(6),
     longitude: +longitude.toFixed(6),
     speed: +speed.toFixed(2),
-    heading: +heading.toFixed(2)
+    heading: +heading.toFixed(2),
+    altitude: +altitude.toFixed(1),
+    satellites: Math.round(satellites)
   };
 }
 

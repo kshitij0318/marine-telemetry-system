@@ -15,6 +15,7 @@ let depth = 20;
 let maxDepth = 800;          
 let direction = 1;          
 let seabed = 900;
+let depthProfile = [];
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
@@ -40,6 +41,15 @@ function generateCTDData() {
     +(1025 + (salinity - 35) * 0.8 - waterTemperature * 0.2).toFixed(2);
   const altimeter =
     +(seabed - depth).toFixed(2);
+
+  // Track depth profile natively
+  depthProfile.push({ 
+    depth: +depth.toFixed(2), 
+    temperature: waterTemperature, 
+    salinity 
+  });
+  if (depthProfile.length > 50) depthProfile.shift(); // Keep last 50 readings
+
   return {
     vesselId,
     deviceId,
@@ -51,7 +61,8 @@ function generateCTDData() {
     conductivity,
     soundVelocity,
     waterDensity,
-    altimeter
+    altimeter,
+    depthProfile
   };
 }
 

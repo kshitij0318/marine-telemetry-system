@@ -27,6 +27,12 @@ function generateCurrentMeterData() {
   const turbulenceIndex =
     +(currentSpeed * 0.15 + Math.random() * 0.05).toFixed(3);
 
+  // Pre-calculate components for the frontend
+  const eastwardComponent = +(currentSpeed * Math.sin(currentDirection * Math.PI / 180)).toFixed(3);
+  const northwardComponent = +(currentSpeed * Math.cos(currentDirection * Math.PI / 180)).toFixed(3);
+
+  const temperature = +(22 + (Math.random() - 0.5) * 0.5).toFixed(2);
+
   return {
     vesselId,
     deviceId,
@@ -34,7 +40,10 @@ function generateCurrentMeterData() {
     currentSpeed,
     currentDirection,
     waterFlowRate,
-    turbulenceIndex
+    turbulenceIndex,
+    eastwardComponent,
+    northwardComponent,
+    currentMeterTemperature: temperature
   };
 }
 

@@ -1,17 +1,30 @@
 const { spawn } = require("child_process");
 const path = require("path");
 
+const children = [];
+
 function runProcess(name, command, args, env = {}) {
   const proc = spawn(command, args, {
     stdio: "inherit",
-    shell: true,
+    shell: false,
     env: { ...process.env, ...env }
   });
+
+  children.push(proc);
 
   proc.on("close", code => {
     console.log(`${name} exited with code ${code}`);
   });
 }
+
+function cleanup() {
+  console.log('Shutting down all processes...');
+  children.forEach(child => child.kill('SIGTERM'));
+  process.exit();
+}
+
+process.on('SIGINT', cleanup);
+process.on('SIGTERM', cleanup);
 
 runProcess(
   "Backend",
