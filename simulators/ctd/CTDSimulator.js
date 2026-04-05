@@ -1,85 +1,67 @@
-const mqtt = require("mqtt");
 const topics = require("../../shared/constants/topics");
+const { createNoise2D } = require("simplex-noise");
 
-const vesselId = process.env.VESSEL_ID || "V001";
-const deviceId = process.env.DEVICE_ID || "CTD01";
+const noise2D = createNoise2D();
 
-const dataTopic = topics.CTD.buildDataTopic(vesselId, deviceId);
-const commandTopic = topics.CTD.buildCommandTopic(vesselId, deviceId);
-
-const client = mqtt.connect("mqtt://localhost:1883");
-
-let interval = 1000;
-let running = true;
-let depth = 20;             
-let maxDepth = 800;          
-let direction = 1;          
-let seabed = 900;
-let depthProfile = [];
-
-function clamp(value, min, max) {
-  return Math.max(min, Math.min(max, value));
-}
-
-function generateCTDData() {
-  depth += direction * (0.5 + Math.random() * 0.5);
-  if (depth > maxDepth || depth < 5) {
-    direction *= -1;
-  }
-  depth = clamp(depth, 5, maxDepth);
-  const waterTemperature =
-    +(25 - depth * 0.02 + (Math.random() - 0.5) * 0.2).toFixed(2);
-  const salinity =
-    +(34.5 + (Math.random() - 0.5) * 0.3).toFixed(2);
-  const conductivity =
-    +(4 + (Math.random() - 0.5) * 0.2).toFixed(3);
-  const pressure =
-    +(depth * 0.1).toFixed(2);
-  const soundVelocity =
-    +(1440 + (4 * waterTemperature) + (1.2 * salinity)).toFixed(2);
-  const waterDensity =
-    +(1025 + (salinity - 35) * 0.8 - waterTemperature * 0.2).toFixed(2);
-  const altimeter =
-    +(seabed - depth).toFixed(2);
-
-  // Track depth profile natively
-  depthProfile.push({ 
-    depth: +depth.toFixed(2), 
-    temperature: waterTemperature, 
-    salinity 
-  });
-  if (depthProfile.length > 50) depthProfile.shift(); // Keep last 50 readings
-
-  return {
-    vesselId,
-    deviceId,
-    timestamp: Date.now(),
-    depth: +depth.toFixed(2),
-    pressure,
-    waterTemperature,
-    salinity,
-    conductivity,
-    soundVelocity,
-    waterDensity,
-    altimeter,
-    depthProfile
-  };
-}
-
-client.on("connect", () => {
-  console.log(`CTD Simulator ${vesselId}-${deviceId} connected`);
-  client.subscribe(commandTopic);
-
-  setInterval(() => {
-    if (running) {
-      client.publish(dataTopic, JSON.stringify(generateCTDData()));
+module.exports = {
+  start: (client, vesselId, shipState) => {
+    const dataTopic = topics.CTD.buildDataTopic(vesselId, "CTD01");
+    let depthProfileHistory = [];
+    
+    let temperature = 22.0;
+    let salinity = 34.5;
+    let tickCount = 0;
+    
+    function seafloorDepth(lat, lng) {
+      const base = 45;
+      const variation = 30;
+      return base + variation * (
+        0.5 * Math.sin(lat * 173.7 + lng * 89.3) +
+        0.3 * Math.sin(lat * 311.1 - lng * 197.4) +
+        0.2 * Math.sin(lat * 47.9 + lng * 443.2)
+      );
     }
-  }, interval);
-});
+    
+    setInterval(() => {
+      tickCount++;
+      const now = Date.now();
+      
+      const targetDepth = seafloorDepth(shipState.lat, shipState.lng);
+      shipState.depth += (targetDepth - shipState.depth) * 0.008;
+      
+      const targetTemp = 22 - (shipState.depth / 100) * 18 + 0.5 * Math.sin(tickCount / 300);
+      temperature += (targetTemp - temperature) * 0.005;
+      
+      const targetSalinity = 34.5 + (shipState.depth / 200) * 1.5;
+      salinity += (targetSalinity - salinity) * 0.003;
+      
+      // Derived C
+      const conductivity = +(0.08 + 0.0162 * temperature) * (salinity / 35);
+      const pressure = +(101.325 + (shipState.depth * 0.101325)).toFixed(2);
+      const soundVelocity = +(1449.2 + 4.6 * temperature - 0.055 * temperature**2 + 0.00029 * temperature**3 + (1.34 - 0.01 * temperature) * (salinity - 35) + 0.016 * shipState.depth).toFixed(1);
 
-client.on("message", (_, message) => {
-  const command = message.toString();
+      depthProfileHistory.push({ depth: +shipState.depth.toFixed(2), temperature: +temperature.toFixed(2) });
+      if (depthProfileHistory.length > 50) depthProfileHistory.shift();
 
-  if (command === "START") running = true;
-  if (command === "STOP") running = false;
-});
+      const payload = {
+        vesselId,
+        deviceId: "CTD01",
+        timestamp: now,
+        depth: +shipState.depth.toFixed(2),
+        temperature: +temperature.toFixed(2),
+        salinity: +salinity.toFixed(2),
+        conductivity: +conductivity.toFixed(3),
+        pressure,
+        soundVelocity,
+        density: +(1025 + salinity * 0.8 - temperature * 0.2).toFixed(2),
+        turbidity: 0.5 + Math.random() * 0.5,
+        dissolvedOxygen: +(8.5 - temperature * 0.2 + Math.sin(tickCount/500) * 0.3).toFixed(2),
+        fluorescence: +(0.8 + 0.4 * Math.sin(tickCount/700)).toFixed(2),
+        pH: +(8.1 + 0.05 * Math.sin(tickCount/900)).toFixed(2),
+        depthProfile: [...depthProfileHistory],
+        status: "ACTIVE"
+      };
+      client.publish(dataTopic, JSON.stringify(payload));
+    }, 500); // 2Hz
+  }
+};

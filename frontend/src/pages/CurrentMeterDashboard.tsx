@@ -5,25 +5,17 @@ import { ArcGauge } from '../app/components/ArcGauge';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Waves, Thermometer } from 'lucide-react';
 
+import { useRingBuffer } from '../hooks/useRingBuffer';
+
 export default function CurrentMeterDashboard() {
   const { sensorData } = useTelemetry();
-  const [currentHistory, setCurrentHistory] = React.useState<Array<{ time: string; speed: number; direction: number }>>([]);
-  const canvasRef = React.useRef<HTMLCanvasElement>(null);
+  
+  const speedData = useRingBuffer(sensorData.currentMeter.speed, 120, 500);
+  const waterTempData = useRingBuffer(sensorData.currentMeter.waterTemperature ?? 0, 120, 500);
+  const eastwardData = useRingBuffer(sensorData.currentMeter.eastward ?? 0, 120, 500);
+  const northwardData = useRingBuffer(sensorData.currentMeter.northward ?? 0, 120, 500);
 
-  React.useEffect(() => {
-    const time = new Date().toLocaleTimeString();
-    setCurrentHistory(prev => {
-      if (prev.length > 0 && prev[prev.length - 1].speed === sensorData.currentMeter.speed && prev[prev.length - 1].direction === sensorData.currentMeter.direction) {
-        return prev;
-      }
-      const newData = [...prev, {
-        time,
-        speed: sensorData.currentMeter.speed,
-        direction: sensorData.currentMeter.direction
-      }];
-      return newData.slice(-20);
-    });
-  }, [sensorData.currentMeter.speed, sensorData.currentMeter.direction]);
+  const canvasRef = React.useRef<HTMLCanvasElement>(null);
 
   // Draw current direction compass
   React.useEffect(() => {
@@ -57,8 +49,8 @@ export default function CurrentMeterDashboard() {
     ctx.fillText('W', centerX - radius - 15, centerY);
 
     // Current arrow
-    const direction = (sensorData.currentMeter.direction * Math.PI) / 180;
-    const arrowLength = (sensorData.currentMeter.speed / 5) * radius * 0.8;
+    const direction = ((sensorData.currentMeter.direction ?? 0) * Math.PI) / 180;
+    const arrowLength = ((sensorData.currentMeter.speed ?? 0) / 5) * radius * 0.8;
     
     ctx.save();
     ctx.translate(centerX, centerY);
@@ -98,7 +90,7 @@ export default function CurrentMeterDashboard() {
               <Waves className="w-4 h-4 text-marine-accent" />
               <span className="text-xs text-marine-text-secondary">Current Speed</span>
             </div>
-            <div className="text-2xl font-bold text-marine-accent">{sensorData.currentMeter.speed.toFixed(2)} m/s</div>
+            <div className="text-2xl font-bold text-marine-accent">{(sensorData.currentMeter.speed ?? 0).toFixed(2)} m/s</div>
           </Card>
           
           <Card className="bg-marine-surface border-marine-border p-4">
@@ -106,7 +98,7 @@ export default function CurrentMeterDashboard() {
               <Waves className="w-4 h-4 text-marine-accent" />
               <span className="text-xs text-marine-text-secondary">Direction</span>
             </div>
-            <div className="text-2xl font-bold text-marine-accent">{sensorData.currentMeter.direction.toFixed(0)}°</div>
+            <div className="text-2xl font-bold text-marine-accent">{(sensorData.currentMeter.direction ?? 0).toFixed(0)}°</div>
           </Card>
           
           <Card className="bg-marine-surface border-marine-border p-4">
@@ -114,7 +106,7 @@ export default function CurrentMeterDashboard() {
               <Thermometer className="w-4 h-4 text-marine-accent" />
               <span className="text-xs text-marine-text-secondary">Water Temp</span>
             </div>
-            <div className="text-2xl font-bold text-marine-accent">{sensorData.currentMeter.temperature.toFixed(1)}°C</div>
+            <div className="text-2xl font-bold text-marine-accent">{(sensorData.currentMeter.waterTemperature ?? 0).toFixed(1)}°C</div>
           </Card>
           
           <Card className="bg-marine-surface border-marine-border p-4">
@@ -146,58 +138,72 @@ export default function CurrentMeterDashboard() {
             <h3 className="text-lg font-semibold text-marine-text mb-4">Current Direction</h3>
             <canvas ref={canvasRef} width={250} height={250} />
             <div className="mt-4 text-center">
-              <div className="text-2xl font-bold text-marine-accent">{sensorData.currentMeter.direction.toFixed(0)}°</div>
+              <div className="text-2xl font-bold text-marine-accent">{(sensorData.currentMeter.direction ?? 0).toFixed(0)}°</div>
               <div className="text-sm text-marine-text-secondary">Direction</div>
             </div>
           </Card>
         </div>
 
         {/* Charts */}
-        <Card className="bg-marine-surface border-marine-border p-6">
-          <h3 className="text-lg font-semibold text-marine-text mb-4">Current Speed Over Time</h3>
-          <ResponsiveContainer width="100%" height={250}>
-            <AreaChart data={currentHistory}>
-              <defs>
-                <linearGradient id="currentGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#00d9ff" stopOpacity={0.8}/>
-                  <stop offset="95%" stopColor="#00d9ff" stopOpacity={0}/>
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1a2d47" />
-              <XAxis dataKey="time" stroke="#8ba7be" fontSize={12} />
-              <YAxis stroke="#8ba7be" fontSize={12} />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: '#0f1e33',
-                  border: '1px solid #1a2d47',
-                  borderRadius: '8px',
-                  color: '#e8f4f8'
-                }}
-              />
-              <Area type="monotone" dataKey="speed" stroke="#00d9ff" fillOpacity={1} fill="url(#currentGradient)" />
-            </AreaChart>
-          </ResponsiveContainer>
-        </Card>
+        <div className="flex gap-6">
+          <Card className="bg-marine-surface border-marine-border p-6 flex-1">
+            <h3 className="text-lg font-semibold text-marine-text mb-4">Current Speed Over Time</h3>
+            <ResponsiveContainer width="100%" height={250}>
+              <AreaChart data={speedData}>
+                <defs>
+                  <linearGradient id="currentGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#00d9ff" stopOpacity={0.8}/>
+                    <stop offset="95%" stopColor="#00d9ff" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#1a2d47" />
+                <XAxis dataKey="t" stroke="#8ba7be" fontSize={12} tickFormatter={t => new Date(t).toLocaleTimeString()} hide />
+                <YAxis domain={['auto','auto']} stroke="#8ba7be" fontSize={12} />
+                <Tooltip contentStyle={{ backgroundColor: '#0f1e33', border: '1px solid #1a2d47', borderRadius: '8px', color: '#e8f4f8' }} />
+                <Area type="monotone" dataKey="v" stroke="#00d9ff" fillOpacity={1} fill="url(#currentGradient)" isAnimationActive={false} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </Card>
+
+          <Card className="bg-marine-surface border-marine-border p-6 flex-1">
+            <h3 className="text-lg font-semibold text-marine-text mb-4">Water Temperature Over Time</h3>
+            <ResponsiveContainer width="100%" height={250}>
+              <AreaChart data={waterTempData}>
+                <defs>
+                  <linearGradient id="tempGradientCM" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#ff8c42" stopOpacity={0.8}/>
+                    <stop offset="95%" stopColor="#ff8c42" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#1a2d47" />
+                <XAxis dataKey="t" stroke="#8ba7be" fontSize={12} tickFormatter={t => new Date(t).toLocaleTimeString()} hide />
+                <YAxis stroke="#8ba7be" fontSize={12} domain={['auto', 'auto']} />
+                <Tooltip contentStyle={{ backgroundColor: '#0f1e33', border: '1px solid #1a2d47', borderRadius: '8px', color: '#e8f4f8' }} />
+                <Area type="monotone" dataKey="v" stroke="#ff8c42" fillOpacity={1} fill="url(#tempGradientCM)" isAnimationActive={false} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </Card>
+        </div>
 
         {/* Additional Data */}
         <div className="grid grid-cols-3 gap-6">
           <Card className="bg-marine-surface border-marine-border p-6">
             <h4 className="text-sm text-marine-text-secondary mb-2">Eastward Component</h4>
             <div className="text-2xl font-mono text-marine-accent">
-              {sensorData.currentMeter.eastwardComponent.toFixed(3)} m/s
+              {(sensorData.currentMeter.eastward ?? 0).toFixed(3)} m/s
             </div>
           </Card>
           
           <Card className="bg-marine-surface border-marine-border p-6">
             <h4 className="text-sm text-marine-text-secondary mb-2">Northward Component</h4>
             <div className="text-2xl font-mono text-marine-accent">
-              {sensorData.currentMeter.northwardComponent.toFixed(3)} m/s
+              {(sensorData.currentMeter.northward ?? 0).toFixed(3)} m/s
             </div>
           </Card>
           
           <Card className="bg-marine-surface border-marine-border p-6">
             <h4 className="text-sm text-marine-text-secondary mb-2">Water Temperature</h4>
-            <div className="text-2xl font-mono text-marine-accent">{sensorData.currentMeter.temperature.toFixed(2)} °C</div>
+            <div className="text-2xl font-mono text-marine-accent">{(sensorData.currentMeter.waterTemperature ?? 0).toFixed(2)} °C</div>
           </Card>
         </div>
       </div>

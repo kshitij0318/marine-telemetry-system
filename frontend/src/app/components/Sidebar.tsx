@@ -20,14 +20,14 @@ const navItems: NavItem[] = [
   { icon: Settings, label: 'Settings', path: '/settings' },
 ];
 
-export function Sidebar() {
+export const Sidebar = React.memo(() => {
   const [isExpanded, setIsExpanded] = useState(false);
   const location = useLocation();
 
   return (
     <TooltipProvider delayDuration={0}>
       <aside
-        className={`fixed left-0 top-0 h-full bg-marine-sidebar border-r border-marine-border transition-all duration-300 z-50 ${
+        className={`fixed left-0 top-0 h-full bg-marine-sidebar border-r border-marine-border transition-all duration-300 z-[1001] ${
           isExpanded ? 'w-64' : 'w-16'
         }`}
         onMouseEnter={() => setIsExpanded(true)}
@@ -87,4 +87,4 @@ export function Sidebar() {
       </aside>
     </TooltipProvider>
   );
-}
+});

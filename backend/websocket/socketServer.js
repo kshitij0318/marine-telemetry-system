@@ -9,6 +9,18 @@ function init(server) {
   wss.on("connection", (ws) => {
     console.log("WebSocket client connected");
 
+    ws.on("message", (msg) => {
+      try {
+        const cmd = JSON.parse(msg);
+        if (cmd.type === 'START_MISSION' || cmd.type === 'STOP_MISSION') {
+          const mqttClient = require("../services/mqttSubscriberService");
+          mqttClient.publish("COMMANDS/MISSION", JSON.stringify(cmd));
+        }
+      } catch (err) {
+        console.error("WS command parse error:", err);
+      }
+    });
+
     ws.on("close", () => {
       console.log("WebSocket client disconnected");
     });

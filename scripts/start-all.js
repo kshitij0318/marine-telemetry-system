@@ -31,36 +31,11 @@ runProcess(
   "node",
   [path.join(__dirname, "../backend/server.js")]
 );
-runProcess(
-  "CTD Simulator",
-  "node",
-  [path.join(__dirname, "../simulators/ctd/CTDSimulator.js")],
-  { VESSEL_ID: "V001", DEVICE_ID: "CTD01" }
-);
 
+// Physics Engine: A unified process orchestrator for strictly coherent multi-sensors
 runProcess(
-  "GNSS Simulator",
+  "Physics Engine",
   "node",
-  [path.join(__dirname, "../simulators/gnss/GNSSSimulator.js")],
-  { VESSEL_ID: "V001", DEVICE_ID: "GNSS01" }
-);
-
-runProcess(
-  "Current Meter Simulator",
-  "node",
-  [path.join(__dirname, "../simulators/currentMeter/CurrentMeterSimulator.js")],
-  { VESSEL_ID: "V001", DEVICE_ID: "CM01" }
-);
-
-runProcess(
-  "Thruster Simulator",
-  "node",
-  [path.join(__dirname, "../simulators/thruster/ThrusterSimulator.js")],
-  { VESSEL_ID: "V001", DEVICE_ID: "THR01" }
-);
-runProcess(
-  "OAS Simulator",
-  "node",
-  [path.join(__dirname, "../simulators/oas/OASSimulator.js")],
-  { VESSEL_ID: "V001", DEVICE_ID: "OAS01" }
+  [path.join(__dirname, "../simulators/index.js")],
+  { VESSEL_ID: "V001" }
 );

@@ -5,9 +5,30 @@ import { RadarDisplay } from '../app/components/RadarDisplay';
 import { Radio, AlertTriangle, CheckCircle } from 'lucide-react';
 import { SensorBar } from '../app/components/SensorBar';
 import { Badge } from '../app/components/ui/badge';
+import { useRingBuffer } from '../hooks/useRingBuffer';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 export default function OASDashboard() {
   const { sensorData } = useTelemetry();
+  
+  const [stats, setStats] = React.useState({ total: 0, maxRange: 0, threatCounts: {low:0, medium:0, high:0} });
+
+  const detectionCountData = useRingBuffer(sensorData.oas.detections.length, 60, 1000);
+  const signalData = useRingBuffer(sensorData.oas.performance?.signalStrength ?? 0, 60, 1000);
+
+  React.useEffect(() => {
+    if (sensorData.oas.detections.length > 0) {
+      setStats(prev => ({
+        total: prev.total + sensorData.oas.detections.length,
+        maxRange: Math.max(prev.maxRange, ...sensorData.oas.detections.map(d => d.distance)),
+        threatCounts: {
+          low: prev.threatCounts.low + sensorData.oas.detections.filter(d => d.threat === 'low').length,
+          medium: prev.threatCounts.medium + sensorData.oas.detections.filter(d => d.threat === 'medium').length,
+          high: prev.threatCounts.high + sensorData.oas.detections.filter(d => d.threat === 'high').length,
+        }
+      }));
+    }
+  }, [sensorData.oas.detections]);
 
   const getThreatLevel = () => {
     if (sensorData.oas.detections.length === 0) return 'none';
@@ -119,8 +140,8 @@ export default function OASDashboard() {
                         </Badge>
                       </div>
                       <div className="text-xs text-marine-text-secondary font-mono space-y-1">
-                        <div>Distance: {detection.distance.toFixed(1)}m</div>
-                        <div>Bearing: {detection.angle.toFixed(0)}°</div>
+                        <div>Distance: {(detection.distance ?? 0).toFixed(1)}m</div>
+                        <div>Bearing: {(detection.angle ?? 0).toFixed(0)}°</div>
                       </div>
                     </div>
                   ))
@@ -150,6 +171,52 @@ export default function OASDashboard() {
           </div>
         </div>
 
+        <div className="grid grid-cols-2 gap-6">
+          <Card className="bg-marine-surface border-marine-border p-6">
+            <h3 className="text-lg font-semibold text-marine-text mb-4">Detection Count Over Time</h3>
+            <ResponsiveContainer width="100%" height={200}>
+              <AreaChart data={detectionCountData}>
+                <defs>
+                  <linearGradient id="detectGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#ef4444" stopOpacity={0.8}/>
+                    <stop offset="95%" stopColor="#ef4444" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#1a2d47" />
+                <XAxis dataKey="t" stroke="#8ba7be" fontSize={12} tickFormatter={t => new Date(t).toLocaleTimeString()} hide />
+                <YAxis stroke="#8ba7be" fontSize={12} domain={['auto', 'auto']} />
+                <Tooltip
+                  contentStyle={{ backgroundColor: '#0f1e33', border: '1px solid #1a2d47', borderRadius: '8px', color: '#e8f4f8' }}
+                  labelFormatter={t => new Date(t).toLocaleTimeString()}
+                />
+                <Area type="monotone" dataKey="v" stroke="#ef4444" fillOpacity={1} fill="url(#detectGradient)" isAnimationActive={false} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </Card>
+
+          <Card className="bg-marine-surface border-marine-border p-6">
+            <h3 className="text-lg font-semibold text-marine-text mb-4">Signal Strength Over Time</h3>
+            <ResponsiveContainer width="100%" height={200}>
+              <AreaChart data={signalData}>
+                <defs>
+                  <linearGradient id="signalGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#00d9ff" stopOpacity={0.8}/>
+                    <stop offset="95%" stopColor="#00d9ff" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#1a2d47" />
+                <XAxis dataKey="t" stroke="#8ba7be" fontSize={12} tickFormatter={t => new Date(t).toLocaleTimeString()} hide />
+                <YAxis stroke="#8ba7be" fontSize={12} domain={['auto', 'auto']} />
+                <Tooltip
+                  contentStyle={{ backgroundColor: '#0f1e33', border: '1px solid #1a2d47', borderRadius: '8px', color: '#e8f4f8' }}
+                  labelFormatter={t => new Date(t).toLocaleTimeString()}
+                />
+                <Area type="monotone" dataKey="v" stroke="#00d9ff" fillOpacity={1} fill="url(#signalGradient)" isAnimationActive={false} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </Card>
+        </div>
+
         {/* Sonar Settings */}
         <div className="grid grid-cols-3 gap-6">
           <Card className="bg-marine-surface border-marine-border p-6">
@@ -157,19 +224,23 @@ export default function OASDashboard() {
             <div className="space-y-3">
               <div className="flex justify-between items-center">
                 <span className="text-sm text-marine-text-secondary">Operating Range</span>
-                <span className="text-sm font-mono text-marine-accent">{sensorData.oas.range}m</span>
+                <span className="text-sm font-mono text-marine-accent">{sensorData.oas.config?.range ?? sensorData.oas.range}m</span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-sm text-marine-text-secondary">Scan Rate</span>
-                <span className="text-sm font-mono text-marine-accent">{sensorData.oas.scanRate} Hz</span>
+                <span className="text-sm text-marine-text-secondary">Frequency</span>
+                <span className="text-sm font-mono text-marine-accent">{sensorData.oas.config?.frequency ?? "N/A"}</span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-sm text-marine-text-secondary">Beam Angle</span>
-                <span className="text-sm font-mono text-marine-accent">{sensorData.oas.beamAngle}°</span>
+                <span className="text-sm text-marine-text-secondary">Beam Width</span>
+                <span className="text-sm font-mono text-marine-accent">{sensorData.oas.config?.beamWidth ?? "N/A"}°</span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-sm text-marine-text-secondary">Resolution</span>
-                <span className="text-sm font-mono text-marine-accent">{sensorData.oas.resolution}m</span>
+                <span className="text-sm text-marine-text-secondary">Pulse Length</span>
+                <span className="text-sm font-mono text-marine-accent">{sensorData.oas.config?.pulseLength ?? "N/A"}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-marine-text-secondary">Mode</span>
+                <span className="text-sm font-mono text-marine-accent">{sensorData.oas.config?.mode ?? "N/A"}</span>
               </div>
             </div>
           </Card>
@@ -178,20 +249,20 @@ export default function OASDashboard() {
             <h3 className="text-lg font-semibold text-marine-text mb-4">Performance</h3>
             <div className="space-y-3">
               <div className="flex justify-between items-center">
-                <span className="text-sm text-marine-text-secondary">Detection Accuracy</span>
-                <span className="text-sm font-mono text-marine-accent">{sensorData.oas.detectionAccuracy.toFixed(1)}%</span>
+                <span className="text-sm text-marine-text-secondary">Ping Rate</span>
+                <span className="text-sm font-mono text-marine-accent">{(sensorData.oas.performance?.pingRate ?? 0).toFixed(1)} Hz</span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-sm text-marine-text-secondary">False Positive Rate</span>
-                <span className="text-sm font-mono text-marine-accent">{sensorData.oas.falsePositiveRate.toFixed(1)}%</span>
+                <span className="text-sm text-marine-text-secondary">Signal Strength</span>
+                <span className="text-sm font-mono text-marine-accent">{(sensorData.oas.performance?.signalStrength ?? 0).toFixed(1)}%</span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-sm text-marine-text-secondary">Processing Latency</span>
-                <span className="text-sm font-mono text-marine-accent">{sensorData.oas.processingLatency.toFixed(1)}ms</span>
+                <span className="text-sm text-marine-text-secondary">Noise Floor</span>
+                <span className="text-sm font-mono text-marine-accent">{(sensorData.oas.performance?.noiseFloor ?? 0).toFixed(1)} dB</span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-sm text-marine-text-secondary">Signal Quality</span>
-                <span className="text-sm font-mono text-green-400">{sensorData.oas.signalQuality}</span>
+                <span className="text-sm text-marine-text-secondary">Target Strength</span>
+                <span className="text-sm font-mono text-marine-accent">{(sensorData.oas.performance?.targetStrength ?? 0).toFixed(1)} dB</span>
               </div>
             </div>
           </Card>
@@ -200,22 +271,18 @@ export default function OASDashboard() {
             <h3 className="text-lg font-semibold text-marine-text mb-4">Statistics</h3>
             <div className="space-y-3">
               <div className="flex justify-between items-center">
-                <span className="text-sm text-marine-text-secondary">Total Scans</span>
-                <span className="text-sm font-mono text-marine-accent">{sensorData.oas.totalScans}</span>
+                <span className="text-sm text-marine-text-secondary">Total Detections</span>
+                <span className="text-sm font-mono text-marine-accent">{stats.total}</span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-sm text-marine-text-secondary">Objects Tracked</span>
-                <span className="text-sm font-mono text-marine-accent">{sensorData.oas.objectsTracked}</span>
+                <span className="text-sm text-marine-text-secondary">Max Range</span>
+                <span className="text-sm font-mono text-marine-accent">{stats.maxRange.toFixed(1)}m</span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-sm text-marine-text-secondary">Avg Distance</span>
-                <span className="text-sm font-mono text-marine-accent">
-                  {sensorData.oas.avgDistance.toFixed(1)}m
+                <span className="text-sm text-marine-text-secondary">Threat Profile</span>
+                <span className="text-sm font-mono text-marine-accent text-xs">
+                  H:{stats.threatCounts.high} | M:{stats.threatCounts.medium} | L:{stats.threatCounts.low}
                 </span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-marine-text-secondary">Uptime</span>
-                <span className="text-sm font-mono text-marine-accent">{sensorData.oas.uptime.toFixed(1)}%</span>
               </div>
             </div>
           </Card>

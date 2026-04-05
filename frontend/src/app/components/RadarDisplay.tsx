@@ -21,8 +21,13 @@ export const RadarDisplay: React.FC<RadarDisplayProps> = ({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { theme } = useTheme();
   
-  const getThemeColors = () => {
-    switch (theme) {
+  const dataRef = useRef({ detections, range, size, theme });
+  useEffect(() => {
+    dataRef.current = { detections, range, size, theme };
+  }, [detections, range, size, theme]);
+  
+  const getThemeColors = (currentTheme: string) => {
+    switch (currentTheme) {
       case 'tactical':
         return {
           bg: '#0a0a0a',
@@ -63,11 +68,13 @@ export const RadarDisplay: React.FC<RadarDisplayProps> = ({
 
     let animationFrameId: number;
     let sweepAngle = 0;
-    const colors = getThemeColors();
-    const center = size / 2;
-    const radius = size / 2 - 20; // 20px padding
 
     const drawRadar = () => {
+      const { detections, range, size, theme: currentTheme } = dataRef.current;
+      const colors = getThemeColors(currentTheme);
+      const center = size / 2;
+      const radius = size / 2 - 20; // 20px padding
+
       // Clear canvas
       ctx.clearRect(0, 0, size, size);
 
@@ -154,8 +161,8 @@ export const RadarDisplay: React.FC<RadarDisplayProps> = ({
 
       ctx.restore();
 
-      // Update sweep angle
-      sweepAngle += 0.02;
+      // Update sweep angle 1.5 degrees per frame
+      sweepAngle += 1.5 * (Math.PI / 180);
 
       animationFrameId = requestAnimationFrame(drawRadar);
     };
@@ -165,7 +172,7 @@ export const RadarDisplay: React.FC<RadarDisplayProps> = ({
     return () => {
       cancelAnimationFrame(animationFrameId);
     };
-  }, [detections, range, size, theme]);
+  }, []); // Empty dependencies. Runs forever unconditionally.
 
   return (
     <canvas
@@ -174,8 +181,8 @@ export const RadarDisplay: React.FC<RadarDisplayProps> = ({
       height={size}
       className="rounded-full overflow-hidden shadow-lg border-2"
       style={{
-        borderColor: getThemeColors().grid,
-        backgroundColor: getThemeColors().bg
+        borderColor: getThemeColors(theme).grid,
+        backgroundColor: getThemeColors(theme).bg
       }}
     />
   );

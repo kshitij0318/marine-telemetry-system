@@ -4,7 +4,7 @@ import { Button } from './ui/button';
 import { ParticleButton } from './ParticleButton';
 import { X, Zap } from 'lucide-react';
 
-export function WelcomeBanner() {
+export const WelcomeBanner = React.memo(() => {
   const [isVisible, setIsVisible] = useState(true);
 
   if (!isVisible) return null;
@@ -40,4 +40,4 @@ export function WelcomeBanner() {
       </Card>
     </div>
   );
-}
+});

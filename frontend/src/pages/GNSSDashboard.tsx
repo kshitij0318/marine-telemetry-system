@@ -5,25 +5,13 @@ import { ArcGauge } from '../app/components/ArcGauge';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, AreaChart } from 'recharts';
 import { Satellite, Navigation, MapPin } from 'lucide-react';
 import { SensorBar } from '../app/components/SensorBar';
+import { useTimeSeriesBuffer } from '../hooks/useTimeSeriesBuffer';
 
 export default function GNSSDashboard() {
   const { sensorData } = useTelemetry();
-  const [speedHistory, setSpeedHistory] = React.useState<Array<{ time: string; speed: number }>>([]);
-  const [headingHistory, setHeadingHistory] = React.useState<Array<{ time: string; heading: number }>>([]);
-
-  React.useEffect(() => {
-    const time = new Date().toLocaleTimeString();
-    setSpeedHistory(prev => {
-      if (prev.length > 0 && prev[prev.length - 1].speed === sensorData.gnss.speed) return prev;
-      const newData = [...prev, { time, speed: sensorData.gnss.speed }];
-      return newData.slice(-20);
-    });
-    setHeadingHistory(prev => {
-      if (prev.length > 0 && prev[prev.length - 1].heading === sensorData.gnss.heading) return prev;
-      const newData = [...prev, { time, heading: sensorData.gnss.heading }];
-      return newData.slice(-20);
-    });
-  }, [sensorData.gnss.speed, sensorData.gnss.heading]);
+  
+  const speedHistory = useTimeSeriesBuffer(sensorData.gnss.speed, 120, 500);
+  const headingHistory = useTimeSeriesBuffer(sensorData.gnss.heading, 120, 500);
 
   return (
     <div>
@@ -43,7 +31,7 @@ export default function GNSSDashboard() {
               <Navigation className="w-4 h-4 text-marine-accent" />
               <span className="text-xs text-marine-text-secondary">Heading</span>
             </div>
-            <div className="text-2xl font-bold text-marine-accent">{sensorData.gnss.heading.toFixed(0)}°</div>
+            <div className="text-2xl font-bold text-marine-accent">{(sensorData.gnss.heading ?? 0).toFixed(0)}°</div>
           </Card>
           
           <Card className="bg-marine-surface border-marine-border p-4">
@@ -51,7 +39,7 @@ export default function GNSSDashboard() {
               <MapPin className="w-4 h-4 text-marine-accent" />
               <span className="text-xs text-marine-text-secondary">Altitude</span>
             </div>
-            <div className="text-2xl font-bold text-marine-accent">{sensorData.gnss.altitude.toFixed(1)}m</div>
+            <div className="text-2xl font-bold text-marine-accent">{(sensorData.gnss.altitude ?? 0).toFixed(1)}m</div>
           </Card>
           
           <Card className="bg-marine-surface border-marine-border p-4">
@@ -105,7 +93,7 @@ export default function GNSSDashboard() {
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1a2d47" />
-                <XAxis dataKey="time" stroke="#8ba7be" fontSize={12} />
+                <XAxis dataKey="time" stroke="#8ba7be" fontSize={12} tickFormatter={(t) => new Date(t).toLocaleTimeString()} />
                 <YAxis stroke="#8ba7be" fontSize={12} />
                 <Tooltip
                   contentStyle={{
@@ -114,8 +102,9 @@ export default function GNSSDashboard() {
                     borderRadius: '8px',
                     color: '#e8f4f8'
                   }}
+                  labelFormatter={(t) => new Date(t).toLocaleTimeString()}
                 />
-                <Area type="monotone" dataKey="speed" stroke="#00d9ff" fillOpacity={1} fill="url(#speedGradient)" />
+                <Area type="monotone" dataKey="value" stroke="#00d9ff" fillOpacity={1} fill="url(#speedGradient)" />
               </AreaChart>
             </ResponsiveContainer>
           </Card>
@@ -125,7 +114,7 @@ export default function GNSSDashboard() {
             <ResponsiveContainer width="100%" height={200}>
               <LineChart data={headingHistory}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1a2d47" />
-                <XAxis dataKey="time" stroke="#8ba7be" fontSize={12} />
+                <XAxis dataKey="time" stroke="#8ba7be" fontSize={12} tickFormatter={(t) => new Date(t).toLocaleTimeString()} />
                 <YAxis stroke="#8ba7be" fontSize={12} domain={[0, 360]} />
                 <Tooltip
                   contentStyle={{
@@ -134,8 +123,9 @@ export default function GNSSDashboard() {
                     borderRadius: '8px',
                     color: '#e8f4f8'
                   }}
+                  labelFormatter={(t) => new Date(t).toLocaleTimeString()}
                 />
-                <Line type="monotone" dataKey="heading" stroke="#00a8cc" strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="value" stroke="#00a8cc" strokeWidth={2} dot={false} />
               </LineChart>
             </ResponsiveContainer>
           </Card>
@@ -147,11 +137,11 @@ export default function GNSSDashboard() {
           <div className="grid grid-cols-2 gap-6">
             <div>
               <div className="text-sm text-marine-text-secondary mb-1">Latitude</div>
-              <div className="text-2xl font-mono text-marine-accent">{sensorData.gnss.latitude.toFixed(7)}°</div>
+              <div className="text-2xl font-mono text-marine-accent">{(sensorData.gnss.latitude ?? 0).toFixed(7)}°</div>
             </div>
             <div>
               <div className="text-sm text-marine-text-secondary mb-1">Longitude</div>
-              <div className="text-2xl font-mono text-marine-accent">{sensorData.gnss.longitude.toFixed(7)}°</div>
+              <div className="text-2xl font-mono text-marine-accent">{(sensorData.gnss.longitude ?? 0).toFixed(7)}°</div>
             </div>
           </div>
         </Card>

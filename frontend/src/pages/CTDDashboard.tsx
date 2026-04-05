@@ -4,18 +4,24 @@ import { Card } from '../app/components/ui/card';
 import { ArcGauge } from '../app/components/ArcGauge';
 import { ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 import { Droplet, Thermometer, Gauge } from 'lucide-react';
-import { SensorBar } from '../app/components/SensorBar';
+import { useRingBuffer } from '../hooks/useRingBuffer';
 
 export default function CTDDashboard() {
   const { sensorData } = useTelemetry();
-  // Using the native depthProfile streaming from CTDSimulator.js
-  const depthProfile = sensorData.ctd.depthProfile || [];
   
-  // Transform the depth profile into temperature history over time for the first chart
-  const tempHistory = depthProfile.map((p, i) => ({
-    time: `-${depthProfile.length - i}s`,
-    temperature: p.temperature
-  }));
+  const tempData = useRingBuffer(sensorData.ctd.temperature, 120, 500);
+  const depthData = useRingBuffer(sensorData.ctd.depth, 120, 500);
+  const salinityData = useRingBuffer(sensorData.ctd.salinity, 120, 500);
+  const pressureData = useRingBuffer(sensorData.ctd.pressure, 120, 500);
+  const conductivityData = useRingBuffer(sensorData.ctd.conductivity, 120, 500);
+  
+  const [profile, setProfile] = React.useState<{x: number, y: number}[]>([]);
+  React.useEffect(() => {
+    setProfile(p => [...p.slice(-300), {
+      x: +(sensorData.ctd.temperature ?? 0).toFixed(2),
+      y: +(sensorData.ctd.depth ?? 0).toFixed(2)
+    }]);
+  }, [sensorData.ctd.temperature, sensorData.ctd.depth]);
 
   return (
     <div>
@@ -27,7 +33,7 @@ export default function CTDDashboard() {
               <Thermometer className="w-4 h-4 text-marine-accent" />
               <span className="text-xs text-marine-text-secondary">Temperature</span>
             </div>
-            <div className="text-2xl font-bold text-marine-accent">{sensorData.ctd.temperature.toFixed(1)}°C</div>
+            <div className="text-2xl font-bold text-marine-accent">{(sensorData.ctd.temperature ?? 0).toFixed(1)}°C</div>
           </Card>
           
           <Card className="bg-marine-surface border-marine-border p-4">
@@ -35,7 +41,7 @@ export default function CTDDashboard() {
               <Droplet className="w-4 h-4 text-marine-accent" />
               <span className="text-xs text-marine-text-secondary">Salinity</span>
             </div>
-            <div className="text-2xl font-bold text-marine-accent">{sensorData.ctd.salinity.toFixed(1)} PSU</div>
+            <div className="text-2xl font-bold text-marine-accent">{(sensorData.ctd.salinity ?? 0).toFixed(1)} PSU</div>
           </Card>
           
           <Card className="bg-marine-surface border-marine-border p-4">
@@ -43,7 +49,7 @@ export default function CTDDashboard() {
               <Gauge className="w-4 h-4 text-marine-accent" />
               <span className="text-xs text-marine-text-secondary">Pressure</span>
             </div>
-            <div className="text-2xl font-bold text-marine-accent">{sensorData.ctd.pressure.toFixed(2)} bar</div>
+            <div className="text-2xl font-bold text-marine-accent">{(sensorData.ctd.pressure ?? 0).toFixed(2)} bar</div>
           </Card>
           
           <Card className="bg-marine-surface border-marine-border p-4">
@@ -101,7 +107,7 @@ export default function CTDDashboard() {
           <Card className="bg-marine-surface border-marine-border p-6">
             <h3 className="text-lg font-semibold text-marine-text mb-4">Temperature Over Time</h3>
             <ResponsiveContainer width="100%" height={250}>
-              <AreaChart data={tempHistory}>
+              <AreaChart data={tempData}>
                 <defs>
                   <linearGradient id="tempGradient" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#ff8c42" stopOpacity={0.8}/>
@@ -109,8 +115,8 @@ export default function CTDDashboard() {
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1a2d47" />
-                <XAxis dataKey="time" stroke="#8ba7be" fontSize={12} />
-                <YAxis stroke="#8ba7be" fontSize={12} />
+                <XAxis dataKey="t" stroke="#8ba7be" fontSize={12} tickFormatter={t => new Date(t).toLocaleTimeString()} hide />
+                <YAxis domain={['auto', 'auto']} stroke="#8ba7be" fontSize={12} />
                 <Tooltip
                   contentStyle={{
                     backgroundColor: '#0f1e33',
@@ -118,8 +124,9 @@ export default function CTDDashboard() {
                     borderRadius: '8px',
                     color: '#e8f4f8'
                   }}
+                  labelFormatter={t => new Date(t).toLocaleTimeString()}
                 />
-                <Area type="monotone" dataKey="temperature" stroke="#ff8c42" fillOpacity={1} fill="url(#tempGradient)" />
+                <Area type="monotone" dataKey="v" stroke="#ff8c42" fillOpacity={1} fill="url(#tempGradient)" isAnimationActive={false} />
               </AreaChart>
             </ResponsiveContainer>
           </Card>
@@ -131,7 +138,7 @@ export default function CTDDashboard() {
                 <CartesianGrid strokeDasharray="3 3" stroke="#1a2d47" />
                 <XAxis
                   type="number"
-                  dataKey="temperature"
+                  dataKey="x"
                   name="Temperature"
                   unit="°C"
                   stroke="#8ba7be"
@@ -139,7 +146,7 @@ export default function CTDDashboard() {
                 />
                 <YAxis
                   type="number"
-                  dataKey="depth"
+                  dataKey="y"
                   name="Depth"
                   unit="m"
                   stroke="#8ba7be"
@@ -155,7 +162,7 @@ export default function CTDDashboard() {
                     color: '#e8f4f8'
                   }}
                 />
-                <Scatter name="Profile" data={depthProfile} fill="#00d9ff" />
+                <Scatter name="Profile" data={profile} fill="#00d9ff" isAnimationActive={false} />
               </ScatterChart>
             </ResponsiveContainer>
           </Card>
@@ -168,31 +175,31 @@ export default function CTDDashboard() {
             <div className="space-y-3">
               <div>
                 <div className="text-sm text-marine-text-secondary">Conductivity</div>
-                <div className="text-xl font-mono text-marine-accent">{sensorData.ctd.conductivity.toFixed(2)} mS/cm</div>
+                <div className="text-xl font-mono text-marine-accent">{(sensorData.ctd.conductivity ?? 0).toFixed(2)} mS/cm</div>
               </div>
               <div>
                 <div className="text-sm text-marine-text-secondary">Temperature</div>
-                <div className="text-xl font-mono text-marine-accent">{sensorData.ctd.temperature.toFixed(2)} °C</div>
+                <div className="text-xl font-mono text-marine-accent">{(sensorData.ctd.temperature ?? 0).toFixed(2)} °C</div>
               </div>
             </div>
             <div className="space-y-3">
               <div>
                 <div className="text-sm text-marine-text-secondary">Depth</div>
-                <div className="text-xl font-mono text-marine-accent">{sensorData.ctd.depth.toFixed(2)} m</div>
+                <div className="text-xl font-mono text-marine-accent">{(sensorData.ctd.depth ?? 0).toFixed(2)} m</div>
               </div>
               <div>
                 <div className="text-sm text-marine-text-secondary">Pressure</div>
-                <div className="text-xl font-mono text-marine-accent">{sensorData.ctd.pressure.toFixed(3)} bar</div>
+                <div className="text-xl font-mono text-marine-accent">{(sensorData.ctd.pressure ?? 0).toFixed(3)} bar</div>
               </div>
             </div>
             <div className="space-y-3">
               <div>
                 <div className="text-sm text-marine-text-secondary">Salinity</div>
-                <div className="text-xl font-mono text-marine-accent">{sensorData.ctd.salinity.toFixed(2)} PSU</div>
+                <div className="text-xl font-mono text-marine-accent">{(sensorData.ctd.salinity ?? 0).toFixed(2)} PSU</div>
               </div>
               <div>
                 <div className="text-sm text-marine-text-secondary">Sound Velocity</div>
-                <div className="text-xl font-mono text-marine-accent">{sensorData.ctd.soundVelocity.toFixed(1)} m/s</div>
+                <div className="text-xl font-mono text-marine-accent">{(sensorData.ctd.soundVelocity ?? 0).toFixed(1)} m/s</div>
               </div>
             </div>
           </div>

@@ -6,27 +6,13 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { Fan, Zap, Thermometer, Activity } from 'lucide-react';
 import { SensorBar } from '../app/components/SensorBar';
 import { Progress } from '../app/components/ui/progress';
+import { useRingBuffer } from '../hooks/useRingBuffer';
 
 export default function ThrusterDashboard() {
   const { sensorData } = useTelemetry();
-  const [rpmHistory, setRpmHistory] = React.useState<Array<{ time: string; rpm: number; power: number }>>([]);
-
-  React.useEffect(() => {
-    // Only update history when live telemetry updates, don't generate mock updates
-    const time = new Date().toLocaleTimeString();
-    setRpmHistory(prev => {
-      // Avoid duplicate entries if timestamp/data hasn't changed
-      if (prev.length > 0 && prev[prev.length - 1].rpm === sensorData.thruster.rpm && prev[prev.length - 1].power === sensorData.thruster.power) {
-        return prev;
-      }
-      const newData = [...prev, {
-        time,
-        rpm: sensorData.thruster.rpm,
-        power: sensorData.thruster.power
-      }];
-      return newData.slice(-20);
-    });
-  }, [sensorData.thruster.rpm, sensorData.thruster.power]);
+  
+  const rpmData = useRingBuffer(sensorData.thruster.rpm, 120, 200);
+  const powerData = useRingBuffer(sensorData.thruster.power, 120, 200);
 
   return (
     <div>
@@ -38,7 +24,7 @@ export default function ThrusterDashboard() {
               <Fan className="w-4 h-4 text-marine-accent" />
               <span className="text-xs text-marine-text-secondary">RPM</span>
             </div>
-            <div className="text-2xl font-bold text-marine-accent">{sensorData.thruster.rpm.toFixed(0)}</div>
+            <div className="text-2xl font-bold text-marine-accent">{(sensorData.thruster.rpm ?? 0).toFixed(0)}</div>
           </Card>
           
           <Card className="bg-marine-surface border-marine-border p-4">
@@ -46,7 +32,7 @@ export default function ThrusterDashboard() {
               <Activity className="w-4 h-4 text-marine-accent" />
               <span className="text-xs text-marine-text-secondary">Power</span>
             </div>
-            <div className="text-2xl font-bold text-marine-accent">{sensorData.thruster.power.toFixed(0)}%</div>
+            <div className="text-2xl font-bold text-marine-accent">{(sensorData.thruster.power ?? 0).toFixed(0)}%</div>
           </Card>
           
           <Card className="bg-marine-surface border-marine-border p-4">
@@ -54,7 +40,7 @@ export default function ThrusterDashboard() {
               <Thermometer className="w-4 h-4 text-marine-accent" />
               <span className="text-xs text-marine-text-secondary">Temperature</span>
             </div>
-            <div className="text-2xl font-bold text-marine-accent">{sensorData.thruster.temperature.toFixed(1)}°C</div>
+            <div className="text-2xl font-bold text-marine-accent">{(sensorData.thruster.temperature ?? 0).toFixed(1)}°C</div>
           </Card>
           
           <Card className="bg-marine-surface border-marine-border p-4">
@@ -96,27 +82,39 @@ export default function ThrusterDashboard() {
         </div>
 
         {/* Performance Chart */}
-        <Card className="bg-marine-surface border-marine-border p-6">
-          <h3 className="text-lg font-semibold text-marine-text mb-4">Performance Over Time</h3>
-          <ResponsiveContainer width="100%" height={250}>
-            <LineChart data={rpmHistory}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1a2d47" />
-              <XAxis dataKey="time" stroke="#8ba7be" fontSize={12} />
-              <YAxis yAxisId="left" stroke="#8ba7be" fontSize={12} />
-              <YAxis yAxisId="right" orientation="right" stroke="#8ba7be" fontSize={12} />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: '#0f1e33',
-                  border: '1px solid #1a2d47',
-                  borderRadius: '8px',
-                  color: '#e8f4f8'
-                }}
-              />
-              <Line yAxisId="left" type="monotone" dataKey="rpm" stroke="#00d9ff" strokeWidth={2} dot={false} name="RPM" />
-              <Line yAxisId="right" type="monotone" dataKey="power" stroke="#00a8cc" strokeWidth={2} dot={false} name="Power %" />
-            </LineChart>
-          </ResponsiveContainer>
-        </Card>
+        <div className="grid grid-cols-2 gap-6">
+          <Card className="bg-marine-surface border-marine-border p-6">
+            <h3 className="text-lg font-semibold text-marine-text mb-4">RPM Over Time</h3>
+            <ResponsiveContainer width="100%" height={250}>
+              <LineChart data={rpmData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#1a2d47" />
+                <XAxis dataKey="t" stroke="#8ba7be" fontSize={12} tickFormatter={t => new Date(t).toLocaleTimeString()} hide />
+                <YAxis domain={['auto', 'auto']} stroke="#8ba7be" fontSize={12} />
+                <Tooltip
+                  contentStyle={{ backgroundColor: '#0f1e33', border: '1px solid #1a2d47', borderRadius: '8px', color: '#e8f4f8' }}
+                  labelFormatter={t => new Date(t).toLocaleTimeString()}
+                />
+                <Line type="monotone" dataKey="v" stroke="#00d9ff" strokeWidth={2} dot={false} name="RPM" isAnimationActive={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          </Card>
+
+          <Card className="bg-marine-surface border-marine-border p-6">
+            <h3 className="text-lg font-semibold text-marine-text mb-4">Power Over Time</h3>
+            <ResponsiveContainer width="100%" height={250}>
+              <LineChart data={powerData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#1a2d47" />
+                <XAxis dataKey="t" stroke="#8ba7be" fontSize={12} tickFormatter={t => new Date(t).toLocaleTimeString()} hide />
+                <YAxis domain={['auto', 'auto']} stroke="#8ba7be" fontSize={12} />
+                <Tooltip
+                  contentStyle={{ backgroundColor: '#0f1e33', border: '1px solid #1a2d47', borderRadius: '8px', color: '#e8f4f8' }}
+                  labelFormatter={t => new Date(t).toLocaleTimeString()}
+                />
+                <Line type="monotone" dataKey="v" stroke="#00a8cc" strokeWidth={2} dot={false} name="Power %" isAnimationActive={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          </Card>
+        </div>
 
         {/* Status Bars */}
         <div className="grid grid-cols-2 gap-6">
@@ -126,7 +124,7 @@ export default function ThrusterDashboard() {
               <div>
                 <div className="flex justify-between text-sm mb-2">
                   <span className="text-marine-text-secondary">Power Output</span>
-                  <span className="text-marine-accent font-mono">{sensorData.thruster.power.toFixed(0)}%</span>
+                  <span className="text-marine-accent font-mono">{(sensorData.thruster.power ?? 0).toFixed(0)}%</span>
                 </div>
                 <Progress value={sensorData.thruster.power} className="h-3" />
               </div>
@@ -138,7 +136,7 @@ export default function ThrusterDashboard() {
                     sensorData.thruster.temperature > 60 ? 'text-red-400' :
                     sensorData.thruster.temperature > 50 ? 'text-amber-400' :
                     'text-marine-accent'
-                  }`}>{sensorData.thruster.temperature.toFixed(1)}°C</span>
+                  }`}>{(sensorData.thruster.temperature ?? 0).toFixed(1)}°C</span>
                 </div>
                 <Progress 
                   value={(sensorData.thruster.temperature / 80) * 100} 
@@ -149,7 +147,7 @@ export default function ThrusterDashboard() {
               <div>
                 <div className="flex justify-between text-sm mb-2">
                   <span className="text-marine-text-secondary">Voltage</span>
-                  <span className="text-marine-accent font-mono">{sensorData.thruster.voltage.toFixed(1)}V</span>
+                  <span className="text-marine-accent font-mono">{(sensorData.thruster.voltage ?? 0).toFixed(1)}V</span>
                 </div>
                 <Progress value={(sensorData.thruster.voltage / 60) * 100} className="h-3" />
               </div>
@@ -162,21 +160,42 @@ export default function ThrusterDashboard() {
               <div className="flex justify-between items-center p-3 bg-marine-dark rounded-lg">
                 <span className="text-sm text-marine-text-secondary">Current Draw</span>
                 <span className="text-lg font-mono text-marine-accent">
-                  {sensorData.thruster.currentDraw.toFixed(1)} A
+                  {(sensorData.thruster.currentDraw ?? 0).toFixed(1)} A
                 </span>
               </div>
               
               <div className="flex justify-between items-center p-3 bg-marine-dark rounded-lg">
                 <span className="text-sm text-marine-text-secondary">Power Consumption</span>
                 <span className="text-lg font-mono text-marine-accent">
-                  {sensorData.thruster.powerConsumption.toFixed(2)} kW
+                  {(sensorData.thruster.powerConsumption ?? 0).toFixed(2)} kW
                 </span>
               </div>
               
               <div className="flex justify-between items-center p-3 bg-marine-dark rounded-lg">
                 <span className="text-sm text-marine-text-secondary">Efficiency</span>
                 <span className="text-lg font-mono text-marine-accent">
-                  {sensorData.thruster.efficiency.toFixed(1)}%
+                  {(sensorData.thruster.efficiency ?? 0).toFixed(1)}%
+                </span>
+              </div>
+              
+              <div className="flex justify-between items-center p-3 bg-marine-dark rounded-lg">
+                <span className="text-sm text-marine-text-secondary">Torque</span>
+                <span className="text-lg font-mono text-marine-accent">
+                  {(sensorData.thruster.torque ?? 0).toFixed(2)} Nm
+                </span>
+              </div>
+              
+              <div className="flex justify-between items-center p-3 bg-marine-dark rounded-lg">
+                <span className="text-sm text-marine-text-secondary">Vibration</span>
+                <span className="text-lg font-mono text-marine-accent">
+                  {(sensorData.thruster.vibration ?? 0).toFixed(2)} g
+                </span>
+              </div>
+              
+              <div className="flex justify-between items-center p-3 bg-marine-dark rounded-lg">
+                <span className="text-sm text-marine-text-secondary">Fuel Flow</span>
+                <span className="text-lg font-mono text-marine-accent">
+                  {(sensorData.thruster.fuelFlow ?? 0).toFixed(2)} L/h
                 </span>
               </div>
               
@@ -198,7 +217,7 @@ export default function ThrusterDashboard() {
               <div>
                 <div className="font-semibold text-amber-400">Temperature Warning</div>
                 <div className="text-sm text-marine-text-secondary">
-                  Thruster temperature is elevated at {sensorData.thruster.temperature.toFixed(1)}°C
+                  Thruster temperature is elevated at {(sensorData.thruster.temperature ?? 0).toFixed(1)}°C
                 </div>
               </div>
             </div>

@@ -1,55 +1,60 @@
-const mqtt = require("mqtt");
 const topics = require("../../shared/constants/topics");
 
-const vesselId = process.env.VESSEL_ID || "V001";
-const deviceId = process.env.DEVICE_ID || "CM01";
+module.exports = {
+  start: (client, vesselId, shipState) => {
+    const dataTopic = topics.CURRENTMETER.buildDataTopic(vesselId, "CM01");
+    let tickCount = 0;
+    
+    let direction = 0;
+    let waterTemperature = 22.0;
+    let salinity = 34.2;
+    let turbidity = 2.1;
+    
+    setInterval(() => {
+      tickCount++;
+      const now = Date.now();
+      
+      const bgDirection = (tickCount / 1200) * 360 % 360;
+      const tidalSpeed = 0.8 + 0.6 * Math.sin(tickCount / 600);
+      const apparentSpeed = tidalSpeed + shipState.speed * 0.08;
+      
+      const speed = Math.max(0.1, Math.min(2.5, apparentSpeed));
+      
+      // Shortest path angle interpolation
+      let angleDiff = bgDirection - direction;
+      angleDiff = ((angleDiff + 180) % 360 + 360) % 360 - 180;
+      direction = (direction + angleDiff * 0.03 + 360) % 360;
+      
+      // Calculate U/V components
+      const dirRad = direction * Math.PI / 180;
+      const eastward = +(speed * Math.sin(dirRad)).toFixed(3);
+      const northward = +(speed * Math.cos(dirRad)).toFixed(3);
+      const upward = +(0.02 * Math.sin(tickCount / 250)).toFixed(3);
+      
+      const targetWaterTemp = 22 - ((shipState.depth || 0) * 0.18) + 0.8 * Math.sin(tickCount / 400);
+      waterTemperature += (targetWaterTemp - waterTemperature) * 0.006;
+      
+      const targetSalinity = 34.2 + ((shipState.depth || 0) * 0.008) + 0.1 * Math.sin(tickCount / 600);
+      salinity += (targetSalinity - salinity) * 0.003;
+      
+      const targetTurbidity = 2.1 + 0.8 * Math.sin(tickCount / 500);
+      turbidity += (targetTurbidity - turbidity) * 0.01;
 
-const dataTopic = topics.CURRENTMETER.buildDataTopic(vesselId, deviceId);
-const client = mqtt.connect("mqtt://localhost:1883");
-
-let baseDirection = 110;
-let phase = 0;
-
-function generateCurrentMeterData() {
-
-  phase += 0.05;
-  const currentSpeed =
-    +(1.2 + Math.sin(phase) * 0.8 + (Math.random() - 0.5) * 0.2).toFixed(2);
-
-  baseDirection += (Math.random() - 0.5) * 2;
-
-  const currentDirection =
-    +(baseDirection % 360).toFixed(2);
-
-  const waterFlowRate =
-    +(currentSpeed * 1.8 + (Math.random() - 0.5) * 0.3).toFixed(2);
-
-  const turbulenceIndex =
-    +(currentSpeed * 0.15 + Math.random() * 0.05).toFixed(3);
-
-  // Pre-calculate components for the frontend
-  const eastwardComponent = +(currentSpeed * Math.sin(currentDirection * Math.PI / 180)).toFixed(3);
-  const northwardComponent = +(currentSpeed * Math.cos(currentDirection * Math.PI / 180)).toFixed(3);
-
-  const temperature = +(22 + (Math.random() - 0.5) * 0.5).toFixed(2);
-
-  return {
-    vesselId,
-    deviceId,
-    timestamp: Date.now(),
-    currentSpeed,
-    currentDirection,
-    waterFlowRate,
-    turbulenceIndex,
-    eastwardComponent,
-    northwardComponent,
-    currentMeterTemperature: temperature
-  };
-}
-
-client.on("connect", () => {
-  console.log(`Current Meter ${vesselId}-${deviceId} connected`);
-  setInterval(() => {
-    client.publish(dataTopic, JSON.stringify(generateCurrentMeterData()));
-  }, 1000);
-});
+      const payload = {
+        vesselId,
+        deviceId: "CM01",
+        timestamp: now,
+        speed: +speed.toFixed(2),
+        direction: +direction.toFixed(2),
+        eastward,
+        northward,
+        upward,
+        waterTemperature: +waterTemperature.toFixed(2),
+        salinity: +salinity.toFixed(2),
+        turbidity: +turbidity.toFixed(2),
+        status: "ACTIVE"
+      };
+      client.publish(dataTopic, JSON.stringify(payload));
+    }, 1000);
+  }
+};
