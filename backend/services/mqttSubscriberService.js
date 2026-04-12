@@ -10,6 +10,19 @@ client.on("connect", () => {
   client.subscribe("vessel/+/+/+/data");
 });
 
+client.on("reconnect", () => {
+  console.log("MQTT Subscriber attempting to reconnect...");
+});
+
+client.on("error", (err) => {
+  console.error("MQTT Subscriber Error:", err.message);
+  // Do not exit; allow automatic retries
+});
+
+client.on("close", () => {
+  console.log("MQTT Subscriber connection closed");
+});
+
 client.on("message", (topic, message) => {
   try {
     const payload = JSON.parse(message.toString());

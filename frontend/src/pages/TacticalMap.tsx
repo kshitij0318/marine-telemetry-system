@@ -13,6 +13,7 @@ export function renderTacticalMap({
   const vesselPos = latLngToCanvas(vesselPosition.lat, vesselPosition.lng, width, height);
 
   // Threat radius circles
+  // Feature 7: Aligned threat colors with RadarDisplay.tsx marine-dark theme
   sensorData.oas.detections.forEach((detection: any) => {
     const threatRadii: Record<string, number> = { low: 50, medium: 100, high: 150 };
     const radius = threatRadii[detection.threat] || 50;
@@ -24,7 +25,12 @@ export function renderTacticalMap({
     
     ctx.beginPath();
     ctx.arc(px, py, radius, 0, 2 * Math.PI);
-    ctx.strokeStyle = detection.threat === 'high' ? '#ff3b3b' : detection.threat === 'medium' ? '#ffb800' : '#00ff9d';
+    
+    // Feature 7 standardized hex codes
+    if (detection.threat === 'high') ctx.strokeStyle = '#f87171';
+    else if (detection.threat === 'medium') ctx.strokeStyle = '#fbbf24';
+    else ctx.strokeStyle = '#4ade80';
+
     ctx.lineWidth = 2;
     ctx.setLineDash([10, 5]);
     ctx.stroke();

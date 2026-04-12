@@ -150,7 +150,7 @@ export function useLiveTelemetry() {
     let reconnectTimer: NodeJS.Timeout;
 
     const connect = () => {
-      ws = new WebSocket('ws://localhost:5000');
+      ws = new WebSocket('ws://localhost:5001');
       wsRef.current = ws;
 
       ws.onopen = () => {

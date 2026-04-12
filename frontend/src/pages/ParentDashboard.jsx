@@ -15,7 +15,7 @@ selectedRef.current = selectedVessel;
 },[selectedVessel]);
 useEffect(()=>{
 
-fetch("http://localhost:5000/api/parent")
+fetch("http://localhost:5001/api/parent")
 .then(res=>res.json())
 .then(data=>{
 
@@ -29,7 +29,7 @@ if(ids.length>0) setSelectedVessel(ids[0]);
 },[]);
 useEffect(()=>{
 
-const ws = new WebSocket("ws://localhost:5000");
+const ws = new WebSocket("ws://localhost:5001");
 
 ws.onmessage = (event)=>{
 

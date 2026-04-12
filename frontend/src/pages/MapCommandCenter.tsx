@@ -6,12 +6,20 @@ import { Tabs, TabsList, TabsTrigger } from '../app/components/ui/tabs';
 import { Navigation, Radar, Route, MapPin, Play, Square, Trash2, AlertTriangle, Eye, EyeOff } from 'lucide-react';
 import { TacticalMapHUD } from './TacticalMap';
 import { SonarDisplay } from './SonarOverlayMap';
-import { AvoidanceZone, Waypoint, RerouteAnimation } from './MissionPlanningMap';
+import { RerouteAnimation } from './MissionPlanningMap';
 import { MapContainer, TileLayer, Marker, Polyline, Polygon, useMapEvents, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { MapCanvasOverlay } from './MapCanvasOverlay';
 import { isOnWater } from '../utils/waterCheck';
+import { useAnimatedVesselPosition } from '../hooks/useAnimatedVesselPosition';
+import { 
+  Waypoint, 
+  AvoidanceZone, 
+  calculateDistance, 
+  computeReroutedPath 
+} from '../utils/routeUtils';
+
 
 // Add CSS for the vessel marker
 if (typeof document !== 'undefined') {
@@ -27,46 +35,8 @@ if (typeof document !== 'undefined') {
   document.head.appendChild(style);
 }
 
-// Distance helper
-function calculateDistance(lat1: number, lng1: number, lat2: number, lng2: number) {
-  const R = 6371e3;
-  const p1 = (lat1 * Math.PI) / 180;
-  const p2 = (lat2 * Math.PI) / 180;
-  const dp = ((lat2 - lat1) * Math.PI) / 180;
-  const dl = ((lng2 - lng1) * Math.PI) / 180;
-  const a = Math.sin(dp / 2) * Math.sin(dp / 2) + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) * Math.sin(dl / 2);
-  return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
-}
+// Moved helpers to src/utils/routeUtils.ts for testability
 
-// Segment intersection
-function getIntersection(p1: any, p2: any, p3: any, p4: any) {
-  const d = (p2.lng - p1.lng) * (p4.lat - p3.lat) - (p2.lat - p1.lat) * (p4.lng - p3.lng);
-  if (d === 0) return null;
-  const u = ((p3.lng - p1.lng) * (p4.lat - p3.lat) - (p3.lat - p1.lat) * (p4.lng - p3.lng)) / d;
-  const v = ((p3.lng - p1.lng) * (p2.lat - p1.lat) - (p3.lat - p1.lat) * (p2.lng - p1.lng)) / d;
-  if (u < 0 || u > 1 || v < 0 || v > 1) return null;
-  return { lat: p1.lat + u * (p2.lat - p1.lat), lng: p1.lng + u * (p2.lng - p1.lng) };
-}
-
-function intersectsPolygon(p1: any, p2: any, poly: any[]) {
-  for (let i = 0; i < poly.length; i++) {
-    const p3 = poly[i];
-    const p4 = poly[(i + 1) % poly.length];
-    if (getIntersection(p1, p2, p3, p4)) return true;
-  }
-  return false;
-}
-
-const applyBuffer = (pt: {lat: number, lng: number}, center: {lat: number, lng: number}) => {
-  const latDiff = pt.lat - center.lat;
-  const lngDiff = pt.lng - center.lng;
-  const dist = Math.sqrt(latDiff * latDiff + lngDiff * lngDiff);
-  const bufferDeg = 0.0001; 
-  return {
-    lat: pt.lat + (latDiff / dist) * bufferDeg,
-    lng: pt.lng + (lngDiff / dist) * bufferDeg,
-  };
-};
 
 function MapInteractionHandler({ mapMode, isDrawingZone, onMapClick, onMapDoubleClick }: any) {
   useMapEvents({
@@ -82,25 +52,24 @@ function RecenterControl({ targetLat, targetLng }: { targetLat: number, targetLn
     <Button 
       size="sm" 
       variant="secondary"
-      onClick={() => map.setView([targetLat, targetLng], map.getZoom())}
-      className="absolute top-4 right-4 bg-marine-dark/80 backdrop-blur-sm z-[1000] border border-marine-border"
+      onClick={() => map.panTo([targetLat, targetLng], { animate: true, duration: 1.0 })}
+      className="absolute top-4 right-4 bg-marine-dark/80 backdrop-blur-sm z-[1000] border border-marine-border hover:bg-marine-accent hover:text-marine-dark transition-colors"
     >
-      <MapPin className="w-4 h-4 mr-2 text-marine-accent" />
+      <MapPin className="w-4 h-4 mr-2 text-marine-accent group-hover:text-marine-dark" />
       Re-center Map
     </Button>
   );
 }
 
-const VesselMarker = ({ followVessel }: { followVessel: boolean }) => {
-  const { sensorData } = useTelemetry();
+const VesselMarker = ({ followVessel, animatedPos }: { followVessel: boolean, animatedPos: any }) => {
   const markerRef = useRef<L.Marker | null>(null);
   const map = useMap();
 
   // Create marker once on mount
   useEffect(() => {
     const icon = L.divIcon({
-      className: '',
-      html: `<div id="vessel-icon" style="
+      className: 'vessel-marker-wrapper',
+      html: `<div id="vessel-icon" class="svg-wrapper" style="
         width: 0; height: 0;
         border-left: 9px solid transparent;
         border-right: 9px solid transparent;
@@ -115,46 +84,38 @@ const VesselMarker = ({ followVessel }: { followVessel: boolean }) => {
       iconAnchor: [0, 0],
     });
 
-    const marker = L.marker([18.9000, 72.6500], { icon, zIndexOffset: 1000 });
+    const marker = L.marker([animatedPos.lat, animatedPos.lng], { icon, zIndexOffset: 1000 });
     marker.addTo(map);
     markerRef.current = marker;
 
     return () => { marker.remove(); };
-  }, [map]); // only on mount
+  }, [map]);
 
-  // Update position and rotation on every sensor update
+  // Update position and rotation on every animation frame (from hook)
   useEffect(() => {
     const marker = markerRef.current;
     if (!marker) return;
 
-    const { latitude, longitude, heading } = sensorData.gnss;
-    if (!isFinite(latitude) || !isFinite(longitude)) return;
+    marker.setLatLng([animatedPos.lat, animatedPos.lng]);
 
-    // Move marker
-    marker.setLatLng([latitude, longitude]);
-
-    // Rotate the icon element
     const el = marker.getElement()?.querySelector('#vessel-icon') as HTMLElement;
     if (el) {
-      el.style.transform = `rotate(${heading}deg) translateX(-50%)`;
+      el.style.transform = `rotate(${animatedPos.heading}deg) translateX(-50%)`;
     }
-  }, [sensorData.gnss.latitude, sensorData.gnss.longitude, sensorData.gnss.heading]);
 
-  // Handle map following
-  useEffect(() => {
-    if (followVessel && markerRef.current) {
-      if (isFinite(sensorData.gnss.latitude) && isFinite(sensorData.gnss.longitude)) {
-        map.panTo([sensorData.gnss.latitude, sensorData.gnss.longitude], { animate: true, duration: 0.5 });
-      }
+    if (followVessel) {
+      map.panTo([animatedPos.lat, animatedPos.lng], { animate: false });
     }
-  }, [sensorData.gnss.latitude, sensorData.gnss.longitude, followVessel, map]);
+  }, [animatedPos.lat, animatedPos.lng, animatedPos.heading, followVessel, map]);
 
   return null;
 };
 
 export default function MapCommandCenter() {
   const { sensorData, sendCommand } = useTelemetry();
+  const animatedPos = useAnimatedVesselPosition();
   const [mapMode, setMapMode] = useState<'navigation' | 'tactical' | 'sonar' | 'mission'>('navigation');
+
   
   const [originalWaypoints, setOriginalWaypoints] = useState<Waypoint[]>([]);
   const [reroutedWaypoints, setReroutedWaypoints] = useState<Waypoint[]>([]);
@@ -170,46 +131,11 @@ export default function MapCommandCenter() {
   const [checkingWater, setCheckingWater] = useState(false);
   const [landError, setLandError] = useState('');
 
-  const vesselPosition = { 
-    lat: sensorData.gnss.latitude, 
-    lng: sensorData.gnss.longitude 
-  };
+  // animatedPos is used for UI rendering (Feature 1)
+  // sensorData is used for live telemetry math
 
-  const computeReroutedPath = (wps: Waypoint[], zones: AvoidanceZone[]): { newPath: Waypoint[]; modifiedWPsCount: number } => {
-    if (wps.length < 2 || zones.length === 0) return { newPath: wps, modifiedWPsCount: 0 };
-    let newPath: Waypoint[] = [wps[0]];
-    let modifiedWPsCount = 0;
+// computeReroutedPath is now imported from src/utils/routeUtils.ts
 
-    for (let i = 0; i < wps.length - 1; i++) {
-        const start = newPath[newPath.length - 1];
-        const end = wps[i + 1];
-        let collisionZone = null;
-        for (const zone of zones) {
-            if (!zone.visible) continue;
-            if (intersectsPolygon(start, end, zone.points)) {
-                collisionZone = zone; break;
-            }
-        }
-
-        if (collisionZone) {
-            let cy = 0, cx = 0;
-            collisionZone.points.forEach((p: any) => { cy += p.lat; cx += p.lng; });
-            cy /= collisionZone.points.length;
-            cx /= collisionZone.points.length;
-            const center = { lat: cy, lng: cx };
-
-            let sortedByDistToStart = [...collisionZone.points].sort((a,b) => calculateDistance(start.lat, start.lng, a.lat, a.lng) - calculateDistance(start.lat, start.lng, b.lat, b.lng));
-            let v1 = applyBuffer(sortedByDistToStart[0], center);
-            let v2 = applyBuffer(sortedByDistToStart[1], center);
-
-            newPath.push({ ...v1, id: `detour-A-${Date.now()}`, name: `REROUTE_A` });
-            newPath.push({ ...v2, id: `detour-B-${Date.now()}`, name: `REROUTE_B` });
-            modifiedWPsCount += 2;
-        }
-        newPath.push(end);
-    }
-    return { newPath, modifiedWPsCount };
-  };
 
   useEffect(() => {
     if (avoidanceZones.length > 0) {
@@ -332,12 +258,13 @@ export default function MapCommandCenter() {
     return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
   };
 
-  // Radar sweep animation
+  // Feature 7: Radar sweep animation (synchronized with RadarDisplay.tsx)
   useEffect(() => {
     let frameId: number;
     let angle = radarSweepAngle;
     const sweep = () => {
-      angle = (angle + 2) % 360;
+      // 1.5 degrees per frame at 60fps consistent with RadarDisplay
+      angle = (angle + 1.5) % 360;
       setRadarSweepAngle(angle);
       frameId = requestAnimationFrame(sweep);
     };
@@ -393,7 +320,7 @@ export default function MapCommandCenter() {
         style={{ zIndex: 0, visibility: mapMode === 'sonar' ? 'hidden' : 'visible' }}
       >
         <MapContainer 
-          center={[18.9000, 72.6500]} 
+          center={[animatedPos.lat, animatedPos.lng]} 
           zoom={14} 
           style={{ width: '100%', height: '100%' }}
           zoomControl={false}
@@ -405,7 +332,8 @@ export default function MapCommandCenter() {
             attribution="&copy; OpenStreetMap contributors" 
           />
           <MapInteractionHandler mapMode={mapMode} isDrawingZone={isDrawingZone} onMapClick={handleMapClick} onMapDoubleClick={handleMapDoubleClick} />
-          <RecenterControl targetLat={vesselPosition.lat} targetLng={vesselPosition.lng} />
+          <RecenterControl targetLat={animatedPos.lat} targetLng={animatedPos.lng} />
+
 
           {/* Overlays dynamically rendering Tact, Radar */}
           <MapCanvasOverlay 
@@ -415,7 +343,8 @@ export default function MapCommandCenter() {
             sonarEchoTrail={sonarEchoTrail} 
           />
 
-          <VesselMarker followVessel={followVessel} />
+          <VesselMarker followVessel={followVessel} animatedPos={animatedPos} />
+
 
           {/* Mission Elements overlay inside Leaflet */}
           {mapMode === 'mission' && (
@@ -541,7 +470,8 @@ export default function MapCommandCenter() {
                     <div>Lng: {wp.lng.toFixed(6)}°</div>
                     {index === 0 && (
                       <div className="text-marine-accent mt-1">
-                        Distance: {(calculateDistance(vesselPosition.lat, vesselPosition.lng, wp.lat, wp.lng) / 1000).toFixed(2)} km
+                        Distance: {(calculateDistance(animatedPos.lat, animatedPos.lng, wp.lat, wp.lng) / 1000).toFixed(2)} km
+
                       </div>
                     )}
                   </div>
@@ -597,7 +527,8 @@ export default function MapCommandCenter() {
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div>
               <div className="text-marine-text-secondary">Position</div>
-              <div className="text-marine-accent font-mono">{vesselPosition.lat.toFixed(6)}°, {vesselPosition.lng.toFixed(6)}°</div>
+              <div className="text-marine-accent font-mono">{animatedPos.lat.toFixed(6)}°, {animatedPos.lng.toFixed(6)}°</div>
+
             </div>
             <div>
               <div className="text-marine-text-secondary">Speed</div>

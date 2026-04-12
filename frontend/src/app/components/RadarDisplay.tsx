@@ -175,15 +175,22 @@ export const RadarDisplay: React.FC<RadarDisplayProps> = ({
   }, []); // Empty dependencies. Runs forever unconditionally.
 
   return (
-    <canvas
-      ref={canvasRef}
-      width={size}
-      height={size}
-      className="rounded-full overflow-hidden shadow-lg border-2"
-      style={{
-        borderColor: getThemeColors(theme).grid,
-        backgroundColor: getThemeColors(theme).bg
-      }}
-    />
+    // Feature 6: Wrapper enforces 1:1 aspect ratio regardless of container width.
+    // The canvas is rendered at fixed pixel dimensions; no CSS stretch can distort it.
+    <div style={{ width: size, height: size, flexShrink: 0 }}>
+      <canvas
+        ref={canvasRef}
+        width={size}
+        height={size}
+        className="rounded-full shadow-lg border-2"
+        style={{
+          display: 'block',
+          width: size,
+          height: size,
+          borderColor: getThemeColors(theme).grid,
+          backgroundColor: getThemeColors(theme).bg,
+        }}
+      />
+    </div>
   );
 };

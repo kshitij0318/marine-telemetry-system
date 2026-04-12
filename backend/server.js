@@ -17,8 +17,8 @@ app.use("/api/parent", parentRoutes);
 app.use("/api/fleet", fleetRoutes);
 app.use("/api/missions", missionRoutes);
 
-const server = app.listen(5000, () =>
-  console.log("Backend running on port 5000")
+const server = app.listen(5001, () =>
+  console.log("Backend running on port 5001")
 );
 
 

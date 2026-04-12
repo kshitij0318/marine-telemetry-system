@@ -14,7 +14,7 @@ export default function FleetOverview() {
     // Poll the backend REST API for fleet overview mapping
     const fetchFleet = async () => {
       try {
-        const response = await fetch('http://localhost:5000/api/fleet');
+        const response = await fetch('http://localhost:5001/api/fleet');
         if (!response.ok) throw new Error('Failed to fetch fleet data');
         const data = await response.json();
         setVessels(data);

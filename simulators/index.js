@@ -8,16 +8,22 @@ const OASSimulator = require("./oas/OASSimulator");
 
 const vesselId = process.env.VESSEL_ID || "V001";
 
+// Feature 8: Start position driven by env vars — relocate simulation anywhere.
+// Set VESSEL_START_LAT / VESSEL_START_LNG to move the ship to any coordinate.
+const START_LAT = parseFloat(process.env.VESSEL_START_LAT || "18.9000");
+const START_LNG = parseFloat(process.env.VESSEL_START_LNG || "72.6500");
+
 // The globally shared simulation physics pool
 const shipState = {
-  lat: 18.9000,
-  lng: 72.6500,
-  heading: 90,
-  speed: 0,
-  depth: 20,
-  roll: 0,
-  pitch: 0
+  lat:     START_LAT,
+  lng:     START_LNG,
+  heading: 270, // West — into open Arabian Sea water by default
+  speed:   0,
+  depth:   20,
+  roll:    0,
+  pitch:   0,
 };
+
 
 const client = mqtt.connect("mqtt://localhost:1883");
 

@@ -1,15 +1,20 @@
 /**
  * Water/land detection using OpenStreetMap Nominatim reverse geocoding.
- * Results are cached to avoid hammering the API on every mouse move.
+ *
+ * Feature 4 fix: Removed region-biased address-presence logic. Now uses Nominatim's
+ * globally consistent `type` and `class` fields, plus its `error` field for open ocean.
+ * Works correctly at any coordinate on Earth, not just the Arabian Sea.
+ *
+ * Results are cached (4-decimal precision) to avoid hammering the API.
  */
 
 const cache = new Map<string, boolean>();
 
-/**
- * Returns true if the coordinate is on water (sea, ocean, bay, lake, river, etc.)
- * Returns false if it's on land (city, road, building, etc.)
- */
+/** Returns true if the coordinate is on water (open ocean, sea, bay, lake, river, etc.) */
 export async function isOnWater(lat: number, lng: number): Promise<boolean> {
+  // Basic range validation — removed all regional restrictions (Feature 4)
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return false;
+
   const key = `${lat.toFixed(4)},${lng.toFixed(4)}`;
   if (cache.has(key)) return cache.get(key)!;
 
@@ -20,54 +25,64 @@ export async function isOnWater(lat: number, lng: number): Promise<boolean> {
     });
 
     if (!res.ok) {
-      // If API fails, assume water (fail-open so mission isn't blocked)
+      // API down — fail-open (don't block placement)
       cache.set(key, true);
       return true;
     }
 
     const data = await res.json();
 
-    // Nominatim returns these type/class combinations for water bodies
-    const waterTypes = new Set([
-      'water', 'bay', 'sea', 'ocean', 'strait', 'river', 'lake', 'canal',
-      'reservoir', 'harbour', 'fjord', 'lagoon', 'tidal', 'wetland'
-    ]);
-    const waterClasses = new Set(['waterway', 'natural', 'water', 'place']);
-
-    const type: string = data.type ?? '';
-    const cls: string = data.class ?? '';
-    const displayName: string = (data.display_name ?? '').toLowerCase();
-
-    // Nominatim returns "Unable to geocode" with no address when in open ocean
-    if (!data.address || Object.keys(data.address ?? {}).length === 0) {
+    // Nominatim explicitly returns {error: "Unable to geocode"} for open ocean
+    if (data.error) {
       cache.set(key, true);
       return true;
     }
 
-    const isWater =
-      waterTypes.has(type) ||
-      (waterClasses.has(cls) && waterTypes.has(type)) ||
-      displayName.includes('sea') ||
-      displayName.includes('ocean') ||
-      displayName.includes('bay') ||
-      displayName.includes('gulf') ||
-      displayName.includes('strait') ||
-      displayName.includes('channel') ||
-      displayName.includes('harbour') ||
-      // Open ocean: no usable address entries (just country/continent)
-      !data.address?.road && !data.address?.city && !data.address?.town &&
-       !data.address?.village && !data.address?.suburb && !data.address?.hamlet;
+    // Globally consistent water type/class codes from Nominatim
+    const waterTypes = new Set([
+      'water', 'bay', 'sea', 'ocean', 'strait', 'river', 'lake', 'canal',
+      'reservoir', 'harbour', 'fjord', 'lagoon', 'tidal_flat', 'wetland',
+      'coastline', 'beach',
+    ]);
 
-    cache.set(key, isWater);
-    return isWater;
+    const type: string  = (data.type  ?? '').toLowerCase();
+    const cls:  string  = (data.class ?? '').toLowerCase();
+    const name: string  = (data.display_name ?? '').toLowerCase();
+
+    // class=natural + type=water → definite water body
+    if (cls === 'natural' && waterTypes.has(type)) {
+      cache.set(key, true);
+      return true;
+    }
+    if (cls === 'waterway') {
+      cache.set(key, true);
+      return true;
+    }
+    if (waterTypes.has(type)) {
+      cache.set(key, true);
+      return true;
+    }
+
+    // Display name keyword fallback (works globally for named seas/oceans)
+    const waterKeywords = ['sea', 'ocean', 'bay', 'gulf', 'strait', 'channel', 'harbour', 'lake', 'river'];
+    if (waterKeywords.some(kw => name.includes(kw))) {
+      cache.set(key, true);
+      return true;
+    }
+
+    // If Nominatim returned a road/building/place → it's land
+    const result = false;
+    cache.set(key, result);
+    return result;
+
   } catch {
-    // Network error — fail-open
+    // Network error — fail-open (never block placement on connectivity issues)
     cache.set(key, true);
     return true;
   }
 }
 
-/** Clears the cache — useful during testing */
+/** Clears the cache — call between test cases */
 export function clearWaterCache() {
   cache.clear();
 }
