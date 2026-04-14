@@ -159,7 +159,11 @@ export default function CurrentMeterDashboard() {
                 <CartesianGrid strokeDasharray="3 3" stroke="#1a2d47" />
                 <XAxis dataKey="t" stroke="#8ba7be" fontSize={12} tickFormatter={t => new Date(t).toLocaleTimeString()} hide />
                 <YAxis domain={['auto','auto']} stroke="#8ba7be" fontSize={12} />
-                <Tooltip contentStyle={{ backgroundColor: '#0f1e33', border: '1px solid #1a2d47', borderRadius: '8px', color: '#e8f4f8' }} />
+                <Tooltip
+                  contentStyle={{ backgroundColor: '#0f1e33', border: '1px solid #1a2d47', borderRadius: '8px', color: '#e8f4f8' }}
+                  labelFormatter={t => new Date(t).toLocaleTimeString()}
+                  formatter={(value: any) => [`${Number(value).toFixed(2)} m/s`, 'Speed']}
+                />
                 <Area type="monotone" dataKey="v" stroke="#00d9ff" fillOpacity={1} fill="url(#currentGradient)" isAnimationActive={false} />
               </AreaChart>
             </ResponsiveContainer>
@@ -178,7 +182,11 @@ export default function CurrentMeterDashboard() {
                 <CartesianGrid strokeDasharray="3 3" stroke="#1a2d47" />
                 <XAxis dataKey="t" stroke="#8ba7be" fontSize={12} tickFormatter={t => new Date(t).toLocaleTimeString()} hide />
                 <YAxis stroke="#8ba7be" fontSize={12} domain={['auto', 'auto']} />
-                <Tooltip contentStyle={{ backgroundColor: '#0f1e33', border: '1px solid #1a2d47', borderRadius: '8px', color: '#e8f4f8' }} />
+                <Tooltip
+                  contentStyle={{ backgroundColor: '#0f1e33', border: '1px solid #1a2d47', borderRadius: '8px', color: '#e8f4f8' }}
+                  labelFormatter={t => new Date(t).toLocaleTimeString()}
+                  formatter={(value: any) => [`${Number(value).toFixed(2)} °C`, 'Temp']}
+                />
                 <Area type="monotone" dataKey="v" stroke="#ff8c42" fillOpacity={1} fill="url(#tempGradientCM)" isAnimationActive={false} />
               </AreaChart>
             </ResponsiveContainer>
@@ -204,6 +212,22 @@ export default function CurrentMeterDashboard() {
           <Card className="bg-marine-surface border-marine-border p-6">
             <h4 className="text-sm text-marine-text-secondary mb-2">Water Temperature</h4>
             <div className="text-2xl font-mono text-marine-accent">{(sensorData.currentMeter.waterTemperature ?? 0).toFixed(2)} °C</div>
+          </Card>
+          <Card className="bg-marine-surface border-marine-border p-6 col-span-3">
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <h4 className="text-sm text-marine-text-secondary mb-1">Upward Component</h4>
+                <div className="text-xl font-mono text-marine-accent">{(sensorData.currentMeter.upward ?? 0).toFixed(3)} m/s</div>
+              </div>
+              <div>
+                <h4 className="text-sm text-marine-text-secondary mb-1">Salinity</h4>
+                <div className="text-xl font-mono text-marine-accent">{(sensorData.currentMeter.salinity ?? 0).toFixed(2)} PSU</div>
+              </div>
+              <div>
+                <h4 className="text-sm text-marine-text-secondary mb-1">Turbidity</h4>
+                <div className="text-xl font-mono text-marine-accent">{(sensorData.currentMeter.turbidity ?? 0).toFixed(2)} NTU</div>
+              </div>
+            </div>
           </Card>
         </div>
       </div>

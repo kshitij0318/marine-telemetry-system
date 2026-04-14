@@ -8,7 +8,7 @@ import { ParticleButton } from './ParticleButton';
 
 export function Header() {
   const { theme, setTheme } = useTheme();
-  const { connectionMode, setConnectionMode, isConnected } = useTelemetry();
+  const { isConnected } = useTelemetry();
 
   const cycleTheme = () => {
     const themes = ['marine-dark', 'light', 'tactical'] as const;
@@ -45,16 +45,6 @@ export function Header() {
       </div>
 
       <div className="flex items-center space-x-4">
-        {/* Connection Mode Toggle */}
-        <div className="flex items-center space-x-2">
-          <span className="text-sm text-marine-text-secondary">Simulation</span>
-          <Switch
-            checked={connectionMode === 'live'}
-            onCheckedChange={(checked) => setConnectionMode(checked ? 'live' : 'simulation')}
-          />
-          <span className="text-sm text-marine-text-secondary">Live</span>
-        </div>
-
         {/* Theme Toggle with Particles */}
         <ParticleButton onClick={cycleTheme} className="text-marine-text-secondary hover:text-marine-text">
           {getThemeIcon()}

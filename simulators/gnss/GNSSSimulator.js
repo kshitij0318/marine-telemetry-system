@@ -1,174 +1,160 @@
 const topics = require("../../shared/constants/topics");
 
-/**
- * GNSS Simulator — Physically coherent, globally relocatable
- *
- * Feature 8 changes:
- *  - Removed LAND_BOXES array (hardcoded to Mumbai coast). The vessel
- *    already has heading-bounce logic; a bbox list only worked near
- *    one region. Now the bounce is purely heading-based (no region check).
- *  - Start position is read from env vars VESSEL_START_LAT / VESSEL_START_LNG
- *    so the simulator can be placed anywhere without code changes.
- *
- * Physics:
- *  - Speed: smooth 2–12 kts, changes every 20–40 s
- *  - Heading: drifts ±20° over 15–25 s intervals
- *  - Position: incremental tick from last known position (no teleport)
- *  - Satellites: 8–12, smooth transitions
- *  - HDOP: inversely correlated with satellite count
- */
+// FIELD AUDIT — GNSS
+// Field | Backend emits | Frontend reads | Match? | Action
+// lat, lng   Yes           Yes              Yes      None
+// heading    Yes           Yes              Yes      None
+// speed      Yes           Yes              Yes      None
+// course     Yes           Yes              Yes      Derive from heading + drift
+// satellites Yes           Yes              Yes      Continuous transition
+// hdop       Yes           Yes              Yes      Continuous transition
+// signalQuality Yes        Yes              Yes      HDOP-derived
+// status     Yes           Yes              Yes      None
 
 module.exports = {
   start: (client, vesselId, shipState) => {
     const dataTopic = topics.GNSS.buildDataTopic(vesselId, "GNSS01");
 
-    let targetSpeed         = shipState.speed || 6;
-    let nextSpeedChangeTime = Date.now() + 20000 + Math.random() * 20000;
-
-    let targetHeading        = shipState.heading;
-    let nextHeadingChangeTime = Date.now() + 15000 + Math.random() * 10000;
-
-    let satellites     = 10;
-    let targetSats     = 10;
-    let nextSatChange  = Date.now() + 45000 + Math.random() * 45000;
-    let hdop           = 1.0;
-
-    // Track consecutive ticks without a valid move (anti-stuck escape)
-    let stuckTicks = 0;
-
-    let missionActive        = false;
-    let missionWaypoints     = [];
+    // ── Simulation State ───────────────────────────────────────────────────
+    let navTarget = null; // { lat, lng }
+    let missionWaypoints = [];
     let currentWaypointIndex = 0;
-    const WAYPOINT_ARRIVAL_RADIUS = 20; // metres
+    let missionActive = false;
 
+    let satellites = 10;
+    let hdop = 1.0;
+    let tickCount = 0;
+    const intervalMs = 100;
+
+    // ── MQTT Commands ──────────────────────────────────────────────────────
     client.subscribe("COMMANDS/MISSION");
+    client.subscribe("COMMANDS/NAVIGATION");
+
     client.on("message", (topic, message) => {
-      if (topic !== "COMMANDS/MISSION") return;
       try {
         const cmd = JSON.parse(message.toString());
-        if (cmd.type === "START_MISSION") {
-          missionWaypoints     = cmd.waypoints;
-          currentWaypointIndex = 0;
-          missionActive        = true;
-        } else if (cmd.type === "STOP_MISSION") {
-          missionActive    = false;
-          missionWaypoints = [];
+        if (topic === "COMMANDS/MISSION") {
+          if (cmd.type === "START_MISSION") {
+            missionWaypoints = cmd.waypoints || [];
+            currentWaypointIndex = 0;
+            missionActive = true;
+            navTarget = null; // Mission overrides Navigation
+          } else if (cmd.type === "STOP_MISSION") {
+            missionActive = false;
+          }
+        } else if (topic === "COMMANDS/NAVIGATION") {
+          if (cmd.type === "SET_NAVIGATION_DESTINATION") {
+            navTarget = { lat: cmd.payload.lat, lng: cmd.payload.lng };
+            missionActive = false; // Navigation overrides Mission
+            missionWaypoints = []; 
+          } else if (cmd.type === "CLEAR_NAVIGATION_DESTINATION") {
+            navTarget = null;
+          }
         }
       } catch (e) {
-        console.error("Error parsing mission command:", e);
+        console.error("GNSS command parse error:", e);
       }
     });
 
-    function missionTick() {
-      if (!missionActive || missionWaypoints.length === 0) return;
-
-      const target = missionWaypoints[currentWaypointIndex];
-      if (!target) { missionActive = false; return; }
-
-      const dLat = target.lat - shipState.lat;
-      const dLng = target.lng - shipState.lng;
-
-      const targetBearing = ((Math.atan2(dLng, dLat) * 180 / Math.PI) + 360) % 360;
-      const delta         = ((targetBearing - shipState.heading + 540) % 360) - 180;
-      shipState.heading   = (shipState.heading + Math.max(-2, Math.min(2, delta)) + 360) % 360;
-
-      const dist = Math.sqrt(
-        (dLat * 111320) ** 2 +
-        (dLng * 111320 * Math.cos(shipState.lat * Math.PI / 180)) ** 2
-      );
-      if (dist < WAYPOINT_ARRIVAL_RADIUS) {
-        currentWaypointIndex++;
-        if (currentWaypointIndex >= missionWaypoints.length) {
-          missionActive = false;
-        }
-      }
+    // ── Geo helpers ────────────────────────────────────────────────────────
+    function haversine(lat1, lon1, lat2, lon2) {
+      const R = 6371e3;
+      const φ1 = lat1 * Math.PI / 180, φ2 = lat2 * Math.PI / 180;
+      const Δφ = (lat2 - lat1) * Math.PI / 180, Δλ = (lon2 - lon1) * Math.PI / 180;
+      const a = Math.sin(Δφ / 2) ** 2 + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) ** 2;
+      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     }
 
-    let tickCount   = 0;
-    const intervalMs = 100;
+    function getBearing(lat1, lon1, lat2, lon2) {
+      const φ1 = lat1 * Math.PI / 180, φ2 = lat2 * Math.PI / 180;
+      const Δλ = (lon2 - lon1) * Math.PI / 180;
+      const y = Math.sin(Δλ) * Math.cos(φ2);
+      const x = Math.cos(φ1) * Math.sin(φ2) - Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ);
+      return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+    }
 
+    // ── Main Simulation Loop ───────────────────────────────────────────────
     setInterval(() => {
       tickCount++;
       const now = Date.now();
 
-      // ── Speed ────────────────────────────────────────────────────────────
-      if (now > nextSpeedChangeTime) {
-        targetSpeed         = 4 + Math.random() * 6;
-        nextSpeedChangeTime = now + 20000 + Math.random() * 20000;
-      }
+      // 1. Determine target heading and destination state
+      let targetHeading = shipState.heading;
+      let targetSpeed = 6.0; // Cruise speed
 
-      if (missionActive) {
-        shipState.speed = shipState.speed + (10 - shipState.speed) * 0.03;
-        shipState.speed = Math.max(2, Math.min(12, shipState.speed));
-        missionTick();
-      } else {
-        shipState.speed = shipState.speed + (targetSpeed - shipState.speed) * 0.03;
-        shipState.speed = Math.max(2, Math.min(12, shipState.speed));
+      const currentActiveTarget = missionActive ? missionWaypoints[currentWaypointIndex] : navTarget;
 
-        if (now > nextHeadingChangeTime) {
-          targetHeading        = shipState.heading + (Math.random() * 40 - 20);
-          nextHeadingChangeTime = now + 15000 + Math.random() * 10000;
+      if (currentActiveTarget) {
+        const dist = haversine(shipState.lat, shipState.lng, currentActiveTarget.lat, currentActiveTarget.lng);
+        
+        if (missionActive && dist < 25) {
+          // Mission waypoint reached
+          currentWaypointIndex++;
+          if (currentWaypointIndex >= missionWaypoints.length) {
+            missionActive = false;
+          }
+        } else if (!missionActive && dist < 25) {
+          // Nav destination reached
+          navTarget = null;
+        } else {
+          // Move towards target
+          targetHeading = getBearing(shipState.lat, shipState.lng, currentActiveTarget.lat, currentActiveTarget.lng);
+          targetSpeed = 10.0; // High speed during transit
         }
-        const hDelta    = ((targetHeading - shipState.heading + 540) % 360) - 180;
-        shipState.heading = (shipState.heading + Math.max(-0.4, Math.min(0.4, hDelta)) + 360) % 360;
-      }
-
-      // ── Position update (incremental — no teleport) ───────────────────
-      const speedMs       = shipState.speed * 0.514444;
-      const headingRad    = (shipState.heading - 90) * Math.PI / 180;
-      const metersPerTick = speedMs * (intervalMs / 1000);
-
-      const nextLat = shipState.lat + (metersPerTick * Math.cos(headingRad)) / 111320;
-      const nextLng = shipState.lng + (metersPerTick * Math.sin(headingRad)) /
-                      (111320 * Math.cos(shipState.lat * Math.PI / 180));
-
-      // Feature 8: Removed LAND_BOXES — heading bounce is purely direction-based.
-      // If the vessel somehow gets stuck (e.g. starts in a constrained bay), the
-      // stuck-tick counter forces it back toward open water after 50 ticks.
-      const latChanged = Math.abs(nextLat - shipState.lat) > 1e-9;
-      const lngChanged = Math.abs(nextLng - shipState.lng) > 1e-9;
-
-      if (latChanged || lngChanged) {
-        shipState.lat = nextLat;
-        shipState.lng = nextLng;
-        stuckTicks    = 0;
       } else {
-        stuckTicks++;
-        if (stuckTicks > 50) {
-          // Escape toward open water (turn 180°)
-          shipState.heading = (shipState.heading + 180) % 360;
-          stuckTicks        = 0;
-        }
+        // Idle/Drift model: slow sinusoidal weave
+        targetHeading = (shipState.heading + 0.2 * Math.sin(tickCount / 100)) % 360;
+        targetSpeed = 4.0 + 0.5 * Math.sin(tickCount / 500);
       }
 
-      // ── Publish every 1 s (10 ticks) ─────────────────────────────────
-      if (tickCount % 10 !== 0) return;
+      // 2. Physics Evasion (Smooth convergence)
+      // Heading convergence
+      const hDelta = ((targetHeading - shipState.heading + 540) % 360) - 180;
+      shipState.heading = (shipState.heading + hDelta * 0.05 + 360) % 360;
 
-      if (now > nextSatChange) {
-        targetSats  = Math.max(8, Math.min(12, satellites + (Math.random() > 0.5 ? 1 : -1)));
-        satellites += Math.sign(targetSats - satellites);
-        nextSatChange = now + 45000 + Math.random() * 45000;
+      // Speed convergence
+      shipState.speed += (targetSpeed - shipState.speed) * 0.02;
+
+      // Position update
+      const speedMs = shipState.speed * 0.514444;
+      const headingRad = (shipState.heading - 90) * Math.PI / 180;
+      const distTick = speedMs * (intervalMs / 1000);
+
+      shipState.lat += (distTick * Math.cos(headingRad)) / 111320;
+      shipState.lng += (distTick * Math.sin(headingRad)) / (111320 * Math.cos(shipState.lat * Math.PI / 180));
+
+      // 3. Sensor internal state evolution (Continuous)
+      const satWave = 10 + 2 * Math.sin(now / 60000);
+      satellites = Math.round(satWave + (Math.random() - 0.5) * 0.1); // slow vary 8-12
+      
+      const targetHdop = satellites >= 10 ? 0.8 : satellites >= 8 ? 1.1 : 1.5;
+      hdop += (targetHdop - hdop) * 0.01 + (Math.random() - 0.5) * 0.01;
+
+      // 4. Publish every 1s
+      if (tickCount % 10 === 0) {
+        const signalQuality = hdop < 1 ? 5 : hdop < 1.4 ? 4 : hdop < 1.8 ? 3 : 2;
+        const fixType = satellites >= 10 ? "DGPS" : satellites >= 8 ? "3D" : "2D";
+
+        const payload = {
+          vesselId,
+          deviceId: "GNSS01",
+          timestamp: now,
+          latitude: +shipState.lat.toFixed(6),
+          longitude: +shipState.lng.toFixed(6),
+          heading: +shipState.heading.toFixed(2),
+          course: +((shipState.heading + Math.sin(now / 5000) * 2 + 360) % 360).toFixed(2),
+          speed: +shipState.speed.toFixed(2),
+          satellites,
+          hdop: +hdop.toFixed(2),
+          signalQuality,
+          fixType,
+          status: "ACTIVE",
+          // Include mission state for synchronization
+          missionActive,
+          currentWaypointIndex,
+        };
+        client.publish(dataTopic, JSON.stringify(payload));
       }
-
-      const targetHdop = 1.0 + (12 - satellites) * 0.375 + Math.random() * 0.2;
-      hdop = hdop + (targetHdop - hdop) * 0.1;
-
-      const payload = {
-        vesselId,
-        deviceId: "GNSS01",
-        timestamp: now,
-        latitude:  +shipState.lat.toFixed(6),
-        longitude: +shipState.lng.toFixed(6),
-        heading:   +shipState.heading.toFixed(2),
-        course:    +shipState.heading.toFixed(2),
-        altitude:  +(15 + Math.random() * 2).toFixed(1),
-        speed:     +shipState.speed.toFixed(2),
-        satellites,
-        hdop,
-        status: "ACTIVE",
-      };
-
-      client.publish(dataTopic, JSON.stringify(payload));
     }, intervalMs);
   },
 };

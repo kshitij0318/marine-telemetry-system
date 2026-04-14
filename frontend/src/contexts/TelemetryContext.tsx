@@ -11,6 +11,8 @@ export interface SensorData {
     course: number;
     satellites: number;
     hdop: number;
+    fixType?: string;
+    signalQuality?: number;
     status: SensorStatus;
   };
   ctd: {
@@ -53,19 +55,24 @@ export interface SensorData {
     fuelFlow: number;
     runtimeHours: number;
     runtimeMinutes: number;
+    maxRpm?: number;
+    tempWarningThreshold?: number;
     status: SensorStatus;
   };
   oas: {
     detections: Array<{ id: string; angle: number; distance: number; threat: 'low' | 'medium' | 'high'; worldLat: number; worldLng: number }>;
     range: number;
-    config?: { range: number; frequency: string; beamWidth: number; pulseLength: string; mode: string };
+    config?: { operatingRange: number; frequency: number; beamWidth: number; pulseLength: number; mode: string };
     performance?: { pingRate: number; signalStrength: number; noiseFloor: number; targetStrength: number };
+    statistics?: { totalDetections: number; threatCounts: { high: number; medium: number; low: number }; maxRange: number };
     status: SensorStatus;
   };
 }
 
 interface TelemetryContextType {
   sensorData: SensorData;
+  missionState: any | null;
+  navigationDestination: any | null;
   isConnected: boolean;
   sendCommand: (cmd: any) => void;
 }
@@ -82,6 +89,8 @@ export function useLiveTelemetry() {
       course: 0,
       satellites: 0,
       hdop: 0,
+      fixType: 'N/A',
+      signalQuality: 0,
       status: 'offline',
     },
     ctd: {
@@ -135,6 +144,8 @@ export function useLiveTelemetry() {
 
   const sensorDataRef = React.useRef<SensorData>(DEFAULT_SENSOR_DATA);
   const [sensorData, setSensorData] = useState<SensorData>(DEFAULT_SENSOR_DATA);
+  const [missionState, setMissionState] = useState<any | null>(null);
+  const [navigationDestination, setNavigationDestination] = useState<any | null>(null);
   const lastUIUpdate = React.useRef<number>(0);
   const [isConnected, setIsConnected] = useState(false);
   const wsRef = React.useRef<WebSocket | null>(null);
@@ -148,8 +159,14 @@ export function useLiveTelemetry() {
   useEffect(() => {
     let ws: WebSocket;
     let reconnectTimer: NodeJS.Timeout;
+    let closedExplicitly = false;
 
     const connect = () => {
+      // Prevent multiple concurrent connection attempts
+      if (wsRef.current && (wsRef.current.readyState === WebSocket.CONNECTING || wsRef.current.readyState === WebSocket.OPEN)) {
+        return;
+      }
+
       ws = new WebSocket('ws://localhost:5001');
       wsRef.current = ws;
 
@@ -160,96 +177,82 @@ export function useLiveTelemetry() {
       ws.onmessage = (event) => {
         try {
           const payload = JSON.parse(event.data);
-          
           if (payload.type === 'parent-update' && payload.data) {
-            const data = payload.data;
-            
-            const shortestAngleDelta = (current: number, target: number) => {
-              return ((target - current + 540) % 360) - 180;
-            };
-            
+            const state = payload.data;
+            const shortestAngleDelta = (current: number, target: number) => ((target - current + 540) % 360) - 180;
             const prev = sensorDataRef.current;
             
             sensorDataRef.current = {
               ...prev,
               gnss: {
                 ...prev.gnss,
-                latitude: data.latitude ?? prev.gnss.latitude,
-                longitude: data.longitude ?? prev.gnss.longitude,
-                heading: data.heading !== undefined ? (prev.gnss.heading + shortestAngleDelta(prev.gnss.heading, data.heading) * 0.06 + 360) % 360 : prev.gnss.heading,
-                speed: data.speed !== undefined ? prev.gnss.speed + (data.speed - prev.gnss.speed) * 0.08 : prev.gnss.speed,
-                course: data.course ?? prev.gnss.course,
-                satellites: data.satellites ?? prev.gnss.satellites,
-                hdop: data.hdop ?? prev.gnss.hdop,
-                status: (data.latitude || data.longitude) ? 'active' : 'offline'
+                latitude: state.gnss?.latitude !== undefined ? prev.gnss.latitude + (state.gnss.latitude - prev.gnss.latitude) * 0.15 : prev.gnss.latitude,
+                longitude: state.gnss?.longitude !== undefined ? prev.gnss.longitude + (state.gnss.longitude - prev.gnss.longitude) * 0.15 : prev.gnss.longitude,
+                heading: state.gnss?.heading !== undefined ? (prev.gnss.heading + shortestAngleDelta(prev.gnss.heading, state.gnss.heading) * 0.08 + 360) % 360 : prev.gnss.heading,
+                speed: state.gnss?.speed !== undefined ? prev.gnss.speed + (state.gnss.speed - prev.gnss.speed) * 0.08 : prev.gnss.speed,
+                course: state.gnss?.course ?? prev.gnss.course,
+                satellites: state.gnss?.satellites ?? prev.gnss.satellites,
+                hdop: state.gnss?.hdop ?? prev.gnss.hdop,
+                fixType: state.gnss?.fixType ?? prev.gnss.fixType,
+                signalQuality: state.gnss?.signalQuality ?? prev.gnss.signalQuality,
+                status: state.gnss?.status?.toLowerCase() as any ?? (state.gnss?.latitude !== undefined ? 'active' : prev.gnss.status),
               },
               ctd: {
                 ...prev.ctd,
-                depth: data.depth !== undefined ? prev.ctd.depth + (data.depth - prev.ctd.depth) * 0.015 : prev.ctd.depth,
-                temperature: data.temperature !== undefined ? prev.ctd.temperature + (data.temperature - prev.ctd.temperature) * 0.008 : prev.ctd.temperature,
-                salinity: data.salinity !== undefined ? prev.ctd.salinity + (data.salinity - prev.ctd.salinity) * 0.004 : prev.ctd.salinity,
-                conductivity: data.conductivity ?? prev.ctd.conductivity,
-                pressure: data.pressure ?? prev.ctd.pressure,
-                density: data.density ?? prev.ctd.density,
-                soundVelocity: data.soundVelocity ?? prev.ctd.soundVelocity,
-                turbidity: data.turbidity ?? prev.ctd.turbidity,
-                dissolvedOxygen: data.dissolvedOxygen ?? prev.ctd.dissolvedOxygen,
-                fluorescence: data.fluorescence ?? prev.ctd.fluorescence,
-                pH: data.pH ?? prev.ctd.pH,
-                status: data.depth !== undefined ? 'active' : 'offline'
+                depth: state.ctd?.depth !== undefined ? prev.ctd.depth + (state.ctd.depth - prev.ctd.depth) * 0.015 : prev.ctd.depth,
+                temperature: state.ctd?.temperature ?? prev.ctd.temperature,
+                salinity: state.ctd?.salinity ?? prev.ctd.salinity,
+                conductivity: state.ctd?.conductivity ?? prev.ctd.conductivity,
+                pressure: state.ctd?.pressure ?? prev.ctd.pressure,
+                density: state.ctd?.density ?? prev.ctd.density,
+                soundVelocity: state.ctd?.soundVelocity ?? prev.ctd.soundVelocity,
+                turbidity: state.ctd?.turbidity ?? prev.ctd.turbidity,
+                dissolvedOxygen: state.ctd?.dissolvedOxygen ?? prev.ctd.dissolvedOxygen,
+                fluorescence: state.ctd?.fluorescence ?? prev.ctd.fluorescence,
+                pH: state.ctd?.pH ?? prev.ctd.pH,
+                status: state.ctd?.status?.toLowerCase() as any ?? (state.ctd?.depth !== undefined ? 'active' : prev.ctd.status),
               },
               currentMeter: {
                 ...prev.currentMeter,
-                speed: data.speed !== undefined && data.eastward !== undefined ? prev.currentMeter.speed + (data.speed - prev.currentMeter.speed) * 0.04 : prev.currentMeter.speed,
-                direction: data.direction !== undefined ? (prev.currentMeter.direction + shortestAngleDelta(prev.currentMeter.direction, data.direction) * 0.03 + 360) % 360 : prev.currentMeter.direction,
-                eastward: data.eastward ?? prev.currentMeter.eastward,
-                northward: data.northward ?? prev.currentMeter.northward,
-                upward: data.upward ?? prev.currentMeter.upward,
-                waterTemperature: data.waterTemperature ?? prev.currentMeter.waterTemperature,
-                status: data.direction !== undefined ? 'active' : 'offline'
+                show: !!state.currentMeter,
+                speed: state.currentMeter?.speed !== undefined ? prev.currentMeter.speed + (state.currentMeter.speed - prev.currentMeter.speed) * 0.06 : prev.currentMeter.speed,
+                direction: state.currentMeter?.direction ?? prev.currentMeter.direction,
+                eastward: state.currentMeter?.eastward ?? prev.currentMeter.eastward,
+                northward: state.currentMeter?.northward ?? prev.currentMeter.northward,
+                upward: state.currentMeter?.upward ?? prev.currentMeter.upward,
+                waterTemperature: state.currentMeter?.waterTemperature ?? prev.currentMeter.waterTemperature,
+                salinity: state.currentMeter?.salinity ?? prev.currentMeter.salinity,
+                turbidity: state.currentMeter?.turbidity ?? prev.currentMeter.turbidity,
+                status: state.currentMeter?.status?.toLowerCase() as any ?? (state.currentMeter?.speed !== undefined ? 'active' : prev.currentMeter.status),
               },
               thruster: {
                 ...prev.thruster,
-                rpm: data.rpm !== undefined ? prev.thruster.rpm + (data.rpm - prev.thruster.rpm) * 0.07 : prev.thruster.rpm,
-                power: data.power ?? prev.thruster.power,
-                temperature: data.temperature !== undefined && data.rpm !== undefined ? prev.thruster.temperature + (data.temperature - prev.thruster.temperature) * 0.012 : prev.thruster.temperature,
-                thrust: data.thrust ?? prev.thruster.thrust,
-                voltage: data.voltage ?? prev.thruster.voltage,
-                current: data.current ?? prev.thruster.current,
-                torque: data.torque ?? prev.thruster.torque,
-                currentDraw: data.currentDraw ?? prev.thruster.currentDraw,
-                powerConsumption: data.powerConsumption ?? prev.thruster.powerConsumption,
-                efficiency: data.efficiency ?? prev.thruster.efficiency,
-                vibration: data.vibration ?? prev.thruster.vibration,
-                fuelFlow: data.fuelFlow ?? prev.thruster.fuelFlow,
-                runtimeHours: data.runtimeHours ?? prev.thruster.runtimeHours,
-                runtimeMinutes: data.runtimeMinutes ?? prev.thruster.runtimeMinutes,
-                status: data.rpm !== undefined ? 'active' : 'offline'
+                rpm: state.thruster?.rpm !== undefined ? prev.thruster.rpm + (state.thruster.rpm - prev.thruster.rpm) * 0.07 : prev.thruster.rpm,
+                power: state.thruster?.power ?? prev.thruster.power,
+                temperature: state.thruster?.temperature ?? prev.thruster.temperature,
+                thrust: state.thruster?.thrust ?? prev.thruster.thrust,
+                voltage: state.thruster?.voltage ?? prev.thruster.voltage,
+                current: state.thruster?.current ?? prev.thruster.current,
+                currentDraw: state.thruster?.currentDraw ?? state.thruster?.current ?? prev.thruster.currentDraw,
+                vibration: state.thruster?.vibration ?? prev.thruster.vibration,
+                fuelFlow: state.thruster?.fuelFlow ?? prev.thruster.fuelFlow,
+                torque: state.thruster?.torque ?? prev.thruster.torque,
+                powerConsumption: state.thruster?.powerConsumption ?? state.thruster?.power ?? prev.thruster.powerConsumption,
+                efficiency: state.thruster?.efficiency ?? prev.thruster.efficiency,
+                runtimeHours: state.thruster?.runtimeHours ?? prev.thruster.runtimeHours,
+                runtimeMinutes: state.thruster?.runtimeMinutes ?? prev.thruster.runtimeMinutes,
+                maxRpm: state.thruster?.maxRpm ?? prev.thruster.maxRpm,
+                tempWarningThreshold: state.thruster?.tempWarningThreshold ?? prev.thruster.tempWarningThreshold,
+                status: state.thruster?.status?.toLowerCase() as any ?? (state.thruster?.rpm !== undefined ? 'active' : prev.thruster.status),
               },
               oas: {
                 ...prev.oas,
-                detections: data.detections ? (() => {
-                  const now = Date.now();
-                  const newDetections = data.detections.map((d: any) => {
-                    const existing = prev.oas.detections.find((e: any) => e.id === d.id);
-                    return {
-                      ...d,
-                      distance: existing ? existing.distance + (d.distance - existing.distance) * 0.12 : d.distance,
-                      lastUpdated: now
-                    };
-                  });
-                  
-                  prev.oas.detections.forEach((e: any) => {
-                    if (!newDetections.find((d: any) => d.id === e.id) && now - (e.lastUpdated || now) < 4000) {
-                      newDetections.push(e);
-                    }
-                  });
-                  return newDetections;
-                })() : prev.oas.detections,
-                range: data.range ?? prev.oas.range,
-                config: data.config ?? prev.oas.config,
-                performance: data.performance ?? prev.oas.performance,
-                status: data.range !== undefined ? 'active' : 'offline'
+                range: state.oas?.range ?? prev.oas.range,
+                config: state.oas?.config ?? prev.oas.config,
+                performance: state.oas?.performance ?? prev.oas.performance,
+                statistics: state.oas?.statistics ?? prev.oas.statistics,
+                detections: state.oas?.detections || prev.oas.detections,
+                status: state.oas?.status === 'SCANNING' ? 'active' : (state.oas?.status?.toLowerCase() as any || prev.oas.status),
               }
             };
             
@@ -257,6 +260,8 @@ export function useLiveTelemetry() {
             if (nowTime - lastUIUpdate.current > 100) {
               lastUIUpdate.current = nowTime;
               setSensorData({ ...sensorDataRef.current });
+              setMissionState(payload.missionState || null);
+              setNavigationDestination(payload.navigationDestination || null);
             }
           }
         } catch (err) {
@@ -266,7 +271,10 @@ export function useLiveTelemetry() {
 
       ws.onclose = () => {
         setIsConnected(false);
-        reconnectTimer = setTimeout(connect, 3000); // Auto reconnect in 3s
+        wsRef.current = null;
+        if (!closedExplicitly) {
+          reconnectTimer = setTimeout(connect, 3000);
+        }
       };
 
       ws.onerror = (err) => {
@@ -278,21 +286,24 @@ export function useLiveTelemetry() {
     connect();
 
     return () => {
+      closedExplicitly = true;
       clearTimeout(reconnectTimer);
-      if (ws) {
-        ws.close();
+      if (wsRef.current) {
+        wsRef.current.onclose = null; // Prevent reconnect on explicit cleanup
+        wsRef.current.close();
+        wsRef.current = null;
       }
     };
   }, []);
 
-  return { sensorData, isConnected, sendCommand };
+  return { sensorData, missionState, navigationDestination, isConnected, sendCommand };
 }
 
 export function TelemetryProvider({ children }: { children: React.ReactNode }) {
   const liveTelemetry = useLiveTelemetry();
 
   return (
-    <TelemetryContext.Provider value={liveTelemetry}>
+    <TelemetryContext.Provider value={{ sensorData: liveTelemetry.sensorData, missionState: liveTelemetry.missionState, navigationDestination: liveTelemetry.navigationDestination, isConnected: liveTelemetry.isConnected, sendCommand: liveTelemetry.sendCommand }}>
       {children}
     </TelemetryContext.Provider>
   );

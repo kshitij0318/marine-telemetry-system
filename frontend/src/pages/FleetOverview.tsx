@@ -3,6 +3,19 @@ import { useTelemetry } from '../contexts/TelemetryContext';
 import { Card } from '../app/components/ui/card';
 import { Ship, Activity, MapPin, AlertCircle } from 'lucide-react';
 import { Badge } from '../app/components/ui/badge';
+import { NotificationFeed } from '../app/components/NotificationFeed';
+
+function SensorLED({ active, delayed, error, ping }: { active: boolean, delayed?: boolean, error?: boolean, ping?: boolean }) {
+  const color = error ? 'bg-red-500' : delayed ? 'bg-amber-500' : active ? 'bg-green-500' : 'bg-marine-border';
+  return (
+    <div className="relative flex h-2 w-2">
+      {(active || error || delayed) && ping && (
+        <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${color}`}></span>
+      )}
+      <span className={`relative inline-flex rounded-full h-2 w-2 ${color}`}></span>
+    </div>
+  );
+}
 
 export default function FleetOverview() {
   const { sensorData } = useTelemetry();
@@ -17,7 +30,23 @@ export default function FleetOverview() {
         const response = await fetch('http://localhost:5001/api/fleet');
         if (!response.ok) throw new Error('Failed to fetch fleet data');
         const data = await response.json();
-        setVessels(data);
+        
+        // Inject live sensorData for V001 right into the fleet mapping if active
+        const enriched = data.map((v: any) => {
+          if (v.id === 'V001' && sensorData) {
+            return {
+              ...v,
+              status: 'active',
+              latitude: sensorData.gnss.latitude,
+              longitude: sensorData.gnss.longitude,
+              speed: sensorData.gnss.speed,
+              heading: sensorData.gnss.heading,
+            };
+          }
+          return v;
+        });
+
+        setVessels(enriched);
         setError(null);
       } catch (err) {
         setError('Connection lost to fleet registry.');
@@ -106,53 +135,28 @@ export default function FleetOverview() {
               </div>
             </div>
 
-            {vessel.id === 'MV-001' && (
+            {vessel.id === 'V001' && (
               <div className="mt-4 pt-4 border-t border-marine-border">
-                <div className="grid grid-cols-5 gap-4">
-                  <div>
-                    <div className="text-xs text-marine-text-secondary mb-1">GNSS</div>
-                    <div className="flex items-center gap-1">
-                      <div className={`w-2 h-2 rounded-full animate-pulse ${
-                        sensorData.gnss.status === 'active' ? 'bg-green-500' : 'bg-red-500'
-                      }`} />
-                      <span className="text-xs text-marine-text capitalize">{sensorData.gnss.status}</span>
-                    </div>
+                <div className="flex gap-4">
+                  <div className="flex flex-col items-center">
+                    <span className="text-[10px] text-marine-text-secondary mb-1">GNSS</span>
+                    <SensorLED active={sensorData.gnss.status === 'ACTIVE' || sensorData.gnss.status === 'active'} ping />
                   </div>
-                  <div>
-                    <div className="text-xs text-marine-text-secondary mb-1">CTD</div>
-                    <div className="flex items-center gap-1">
-                      <div className={`w-2 h-2 rounded-full animate-pulse ${
-                        sensorData.ctd.status === 'active' ? 'bg-green-500' : 'bg-red-500'
-                      }`} />
-                      <span className="text-xs text-marine-text capitalize">{sensorData.ctd.status}</span>
-                    </div>
+                  <div className="flex flex-col items-center">
+                    <span className="text-[10px] text-marine-text-secondary mb-1">CTD</span>
+                    <SensorLED active={sensorData.ctd.status === 'ACTIVE' || sensorData.ctd.status === 'active'} ping />
                   </div>
-                  <div>
-                    <div className="text-xs text-marine-text-secondary mb-1">Current Meter</div>
-                    <div className="flex items-center gap-1">
-                      <div className={`w-2 h-2 rounded-full animate-pulse ${
-                        sensorData.currentMeter.status === 'active' ? 'bg-green-500' : 'bg-red-500'
-                      }`} />
-                      <span className="text-xs text-marine-text capitalize">{sensorData.currentMeter.status}</span>
-                    </div>
+                  <div className="flex flex-col items-center">
+                    <span className="text-[10px] text-marine-text-secondary mb-1">METR</span>
+                    <SensorLED active={sensorData.currentMeter.status === 'ACTIVE' || sensorData.currentMeter.status === 'active'} ping />
                   </div>
-                  <div>
-                    <div className="text-xs text-marine-text-secondary mb-1">Thruster</div>
-                    <div className="flex items-center gap-1">
-                      <div className={`w-2 h-2 rounded-full animate-pulse ${
-                        sensorData.thruster.status === 'active' ? 'bg-green-500' : 'bg-red-500'
-                      }`} />
-                      <span className="text-xs text-marine-text capitalize">{sensorData.thruster.status}</span>
-                    </div>
+                  <div className="flex flex-col items-center">
+                    <span className="text-[10px] text-marine-text-secondary mb-1">THR</span>
+                    <SensorLED active={sensorData.thruster.status === 'ACTIVE' || sensorData.thruster.status === 'active'} ping />
                   </div>
-                  <div>
-                    <div className="text-xs text-marine-text-secondary mb-1">OAS</div>
-                    <div className="flex items-center gap-1">
-                      <div className={`w-2 h-2 rounded-full animate-pulse ${
-                        sensorData.oas.status === 'active' ? 'bg-green-500' : 'bg-red-500'
-                      }`} />
-                      <span className="text-xs text-marine-text capitalize">{sensorData.oas.status}</span>
-                    </div>
+                  <div className="flex flex-col items-center">
+                    <span className="text-[10px] text-marine-text-secondary mb-1">OAS</span>
+                    <SensorLED active={sensorData.oas.status === 'ACTIVE' || sensorData.oas.status === 'active'} ping />
                   </div>
                 </div>
               </div>
@@ -161,39 +165,9 @@ export default function FleetOverview() {
         ))}
       </div>
 
-      {/* System Alerts */}
-      <Card className="bg-marine-surface border-marine-border p-6">
-        <h3 className="text-lg font-semibold text-marine-text mb-4 flex items-center gap-2">
-          <AlertCircle className="w-5 h-5 text-marine-accent" />
-          Recent Alerts
-        </h3>
-        <div className="space-y-3">
-          <div className="p-3 bg-marine-dark rounded-lg border border-marine-border">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-                <div>
-                  <div className="text-sm font-medium text-marine-text">MV-002 delayed signal</div>
-                  <div className="text-xs text-marine-text-secondary">2 minutes ago</div>
-                </div>
-              </div>
-              <Badge variant="secondary" className="bg-amber-500 border-none">Warning</Badge>
-            </div>
-          </div>
-          <div className="p-3 bg-marine-dark rounded-lg border border-marine-border">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-2 h-2 rounded-full bg-green-500" />
-                <div>
-                  <div className="text-sm font-medium text-marine-text">All systems operational</div>
-                  <div className="text-xs text-marine-text-secondary">5 minutes ago</div>
-                </div>
-              </div>
-              <Badge className="bg-green-500">Info</Badge>
-            </div>
-          </div>
-        </div>
-      </Card>
+      <div className="mt-8">
+        <NotificationFeed />
+      </div>
     </div>
   );
 }

@@ -307,3 +307,53 @@
 .animate-radar-sweep {
   animation: radar-sweep 4s linear infinite;
 }
+
+/* Tactical Map Markers */
+.vessel-marker {
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  filter: drop-shadow(0 0 8px var(--marine-accent));
+}
+
+.vessel-arrow {
+  width: 0;
+  height: 0;
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-bottom: 20px solid var(--marine-accent);
+  transition: transform 0.2s ease-out;
+}
+
+.wp-marker {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.wp-dot {
+  width: 10px;
+  height: 10px;
+  background: var(--marine-accent-secondary);
+  border: 2px solid white;
+  border-radius: 50%;
+  box-shadow: 0 0 10px var(--marine-accent-secondary);
+}
+
+.wp-label {
+  font-size: 10px;
+  font-weight: bold;
+  color: white;
+  text-shadow: 0 0 4px black;
+  white-space: nowrap;
+  background: rgba(0,0,0,0.5);
+  padding: 1px 4px;
+  border-radius: 4px;
+}
+
+.nav-dest-marker {
+  z-index: 1000 !important;
+}

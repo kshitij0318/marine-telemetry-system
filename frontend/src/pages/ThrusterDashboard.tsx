@@ -32,7 +32,7 @@ export default function ThrusterDashboard() {
               <Activity className="w-4 h-4 text-marine-accent" />
               <span className="text-xs text-marine-text-secondary">Power</span>
             </div>
-            <div className="text-2xl font-bold text-marine-accent">{(sensorData.thruster.power ?? 0).toFixed(0)}%</div>
+            <div className="text-2xl font-bold text-marine-accent">{(sensorData.thruster.power ?? 0).toFixed(1)} kW</div>
           </Card>
           
           <Card className="bg-marine-surface border-marine-border p-4">
@@ -46,12 +46,12 @@ export default function ThrusterDashboard() {
           <Card className="bg-marine-surface border-marine-border p-4">
             <div className="flex items-center gap-2 mb-2">
               <div className={`w-2 h-2 rounded-full animate-pulse ${
-                sensorData.thruster.status === 'active' ? 'bg-green-500' : 
-                sensorData.thruster.status === 'delayed' ? 'bg-amber-500' : 'bg-red-500'
+                String(sensorData.thruster.status).toLowerCase() === 'active' ? 'bg-green-500' : 
+                String(sensorData.thruster.status).toLowerCase() === 'delayed' ? 'bg-amber-500' : 'bg-red-500'
               }`} />
               <span className="text-xs text-marine-text-secondary">Status</span>
             </div>
-            <div className="text-sm font-medium text-marine-text capitalize">{sensorData.thruster.status}</div>
+            <div className="text-sm font-medium text-marine-text capitalize">{String(sensorData.thruster.status).toLowerCase()}</div>
           </Card>
         </div>
 
@@ -61,7 +61,7 @@ export default function ThrusterDashboard() {
             <ArcGauge
               value={sensorData.thruster.rpm}
               min={0}
-              max={2000}
+              max={sensorData.thruster.maxRpm ?? 3000}
               label="RPM"
               unit="rpm"
               size={280}
@@ -72,9 +72,9 @@ export default function ThrusterDashboard() {
             <ArcGauge
               value={sensorData.thruster.power}
               min={0}
-              max={100}
+              max={300}
               label="Power Output"
-              unit="%"
+              unit="kW"
               size={280}
               color="#00a8cc"
             />
@@ -133,13 +133,13 @@ export default function ThrusterDashboard() {
                 <div className="flex justify-between text-sm mb-2">
                   <span className="text-marine-text-secondary">Temperature</span>
                   <span className={`font-mono ${
-                    sensorData.thruster.temperature > 60 ? 'text-red-400' :
-                    sensorData.thruster.temperature > 50 ? 'text-amber-400' :
+                    sensorData.thruster.temperature > (sensorData.thruster.tempWarningThreshold ?? 60) ? 'text-red-400' :
+                    sensorData.thruster.temperature > ((sensorData.thruster.tempWarningThreshold ?? 60) * 0.8) ? 'text-amber-400' :
                     'text-marine-accent'
                   }`}>{(sensorData.thruster.temperature ?? 0).toFixed(1)}°C</span>
                 </div>
                 <Progress 
-                  value={(sensorData.thruster.temperature / 80) * 100} 
+                  value={(sensorData.thruster.temperature / (sensorData.thruster.tempWarningThreshold ?? 80)) * 100} 
                   className="h-3 bg-marine-dark [&>div]:bg-amber-500"
                 />
               </div>
@@ -160,14 +160,14 @@ export default function ThrusterDashboard() {
               <div className="flex justify-between items-center p-3 bg-marine-dark rounded-lg">
                 <span className="text-sm text-marine-text-secondary">Current Draw</span>
                 <span className="text-lg font-mono text-marine-accent">
-                  {(sensorData.thruster.currentDraw ?? 0).toFixed(1)} A
+                  {(sensorData.thruster.current ?? sensorData.thruster.currentDraw ?? 0).toFixed(1)} A
                 </span>
               </div>
               
               <div className="flex justify-between items-center p-3 bg-marine-dark rounded-lg">
                 <span className="text-sm text-marine-text-secondary">Power Consumption</span>
                 <span className="text-lg font-mono text-marine-accent">
-                  {(sensorData.thruster.powerConsumption ?? 0).toFixed(2)} kW
+                  {(sensorData.thruster.power ?? sensorData.thruster.powerConsumption ?? 0).toFixed(2)} kW
                 </span>
               </div>
               
@@ -210,7 +210,7 @@ export default function ThrusterDashboard() {
         </div>
 
         {/* Alerts */}
-        {sensorData.thruster.temperature > 50 && (
+        {sensorData.thruster.temperature > (sensorData.thruster.tempWarningThreshold ?? 80) && (
           <Card className="bg-amber-500/10 border-amber-500/50 p-4">
             <div className="flex items-center gap-2">
               <Thermometer className="w-5 h-5 text-amber-400" />

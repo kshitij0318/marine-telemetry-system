@@ -168,10 +168,9 @@ export default function CTDDashboard() {
           </Card>
         </div>
 
-        {/* Data Table */}
-        <Card className="bg-marine-surface border-marine-border p-6">
+        <Card className="bg-marine-surface border-marine-border p-6 mt-6">
           <h3 className="text-lg font-semibold text-marine-text mb-4">Detailed Readings</h3>
-          <div className="grid grid-cols-3 gap-6">
+          <div className="grid grid-cols-4 gap-6">
             <div className="space-y-3">
               <div>
                 <div className="text-sm text-marine-text-secondary">Conductivity</div>
@@ -180,6 +179,10 @@ export default function CTDDashboard() {
               <div>
                 <div className="text-sm text-marine-text-secondary">Temperature</div>
                 <div className="text-xl font-mono text-marine-accent">{(sensorData.ctd.temperature ?? 0).toFixed(2)} °C</div>
+              </div>
+              <div>
+                <div className="text-sm text-marine-text-secondary">Density</div>
+                <div className="text-xl font-mono text-marine-accent">{(sensorData.ctd.density ?? 0).toFixed(2)} kg/m³</div>
               </div>
             </div>
             <div className="space-y-3">
@@ -191,6 +194,10 @@ export default function CTDDashboard() {
                 <div className="text-sm text-marine-text-secondary">Pressure</div>
                 <div className="text-xl font-mono text-marine-accent">{(sensorData.ctd.pressure ?? 0).toFixed(3)} bar</div>
               </div>
+              <div>
+                <div className="text-sm text-marine-text-secondary">pH</div>
+                <div className="text-xl font-mono text-marine-accent">{sensorData.ctd.pH !== undefined ? sensorData.ctd.pH.toFixed(2) : 'N/A'}</div>
+              </div>
             </div>
             <div className="space-y-3">
               <div>
@@ -199,7 +206,21 @@ export default function CTDDashboard() {
               </div>
               <div>
                 <div className="text-sm text-marine-text-secondary">Sound Velocity</div>
-                <div className="text-xl font-mono text-marine-accent">{(sensorData.ctd.soundVelocity ?? 0).toFixed(1)} m/s</div>
+                <div className="text-xl font-mono text-marine-accent">{sensorData.ctd.soundVelocity !== undefined ? sensorData.ctd.soundVelocity.toFixed(1) : 'N/A'} m/s</div>
+              </div>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <div className="text-sm text-marine-text-secondary">Turbidity</div>
+                <div className="text-xl font-mono text-marine-accent">{sensorData.ctd.turbidity !== undefined ? sensorData.ctd.turbidity.toFixed(2) : 'N/A'} NTU</div>
+              </div>
+              <div>
+                <div className="text-sm text-marine-text-secondary">Dissolved Oxygen</div>
+                <div className="text-xl font-mono text-marine-accent">{sensorData.ctd.dissolvedOxygen !== undefined ? sensorData.ctd.dissolvedOxygen.toFixed(2) : 'N/A'} mg/L</div>
+              </div>
+              <div>
+                <div className="text-sm text-marine-text-secondary">Fluorescence</div>
+                <div className="text-xl font-mono text-marine-accent">{sensorData.ctd.fluorescence !== undefined ? sensorData.ctd.fluorescence.toFixed(2) : 'N/A'} µg/L</div>
               </div>
             </div>
           </div>

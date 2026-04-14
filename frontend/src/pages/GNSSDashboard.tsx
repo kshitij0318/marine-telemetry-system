@@ -5,13 +5,18 @@ import { ArcGauge } from '../app/components/ArcGauge';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, AreaChart } from 'recharts';
 import { Satellite, Navigation, MapPin } from 'lucide-react';
 import { SensorBar } from '../app/components/SensorBar';
-import { useTimeSeriesBuffer } from '../hooks/useTimeSeriesBuffer';
+import { useRingBuffer } from '../hooks/useRingBuffer';
+import { Signal, Compass } from 'lucide-react';
 
 export default function GNSSDashboard() {
   const { sensorData } = useTelemetry();
   
-  const speedHistory = useTimeSeriesBuffer(sensorData.gnss.speed, 120, 500);
-  const headingHistory = useTimeSeriesBuffer(sensorData.gnss.heading, 120, 500);
+  const speedHistory = useRingBuffer(sensorData.gnss.speed, 120, 500);
+  const headingHistory = useRingBuffer(sensorData.gnss.heading, 120, 500);
+  const satelliteHistory = useRingBuffer(sensorData.gnss.satellites, 120, 500);
+
+  const quality = sensorData.gnss.signalQuality ?? 0;
+  const hdop = sensorData.gnss.hdop ?? 0;
 
   return (
     <div>
@@ -21,9 +26,13 @@ export default function GNSSDashboard() {
           <Card className="bg-marine-surface border-marine-border p-4">
             <div className="flex items-center gap-2 mb-2">
               <Satellite className="w-4 h-4 text-marine-accent" />
-              <span className="text-xs text-marine-text-secondary">Satellites</span>
+              <span className="text-xs text-marine-text-secondary">Satellites & Fix</span>
             </div>
             <div className="text-2xl font-bold text-marine-accent">{sensorData.gnss.satellites}</div>
+            <div className={`text-xs font-mono px-2 py-0.5 mt-1 inline-block rounded ${
+              sensorData.gnss.fixType === 'DGPS' ? 'bg-green-900/40 text-green-400' :
+              sensorData.gnss.fixType === '3D' ? 'bg-blue-900/40 text-blue-400' : 'bg-amber-900/40 text-amber-400'
+            }`}>{sensorData.gnss.fixType ?? 'N/A'}</div>
           </Card>
           
           <Card className="bg-marine-surface border-marine-border p-4">
@@ -36,10 +45,23 @@ export default function GNSSDashboard() {
           
           <Card className="bg-marine-surface border-marine-border p-4">
             <div className="flex items-center gap-2 mb-2">
-              <MapPin className="w-4 h-4 text-marine-accent" />
-              <span className="text-xs text-marine-text-secondary">Altitude</span>
+              <Compass className="w-4 h-4 text-marine-accent" />
+              <span className="text-xs text-marine-text-secondary">Course (COG)</span>
             </div>
-            <div className="text-2xl font-bold text-marine-accent">{(sensorData.gnss.altitude ?? 0).toFixed(1)}m</div>
+            <div className="text-2xl font-bold text-marine-accent">{(sensorData.gnss.course ?? 0).toFixed(1)}°</div>
+          </Card>
+          
+          <Card className="bg-marine-surface border-marine-border p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Signal className="w-4 h-4 text-marine-accent" />
+              <span className="text-xs text-marine-text-secondary">Signal Quality (HDOP: {hdop.toFixed(2)})</span>
+            </div>
+            <div className="flex items-end gap-1 mt-2 h-7">
+               {[1,2,3,4,5].map(i => (
+                 <div key={i} className={`w-2 rounded-sm transition-all ${i <= quality ? 'bg-marine-accent' : 'bg-marine-border'}`}
+                   style={{height: `${i*4+4}px`}} />
+               ))}
+            </div>
           </Card>
           
           <Card className="bg-marine-surface border-marine-border p-4">
@@ -127,6 +149,33 @@ export default function GNSSDashboard() {
                 />
                 <Line type="monotone" dataKey="value" stroke="#00a8cc" strokeWidth={2} dot={false} />
               </LineChart>
+            </ResponsiveContainer>
+          </Card>
+
+          <Card className="bg-marine-surface border-marine-border p-6 col-span-2">
+            <h3 className="text-lg font-semibold text-marine-text mb-4">Satellite Count Over Time</h3>
+            <ResponsiveContainer width="100%" height={200}>
+              <AreaChart data={satelliteHistory}>
+                <defs>
+                  <linearGradient id="satGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#4ade80" stopOpacity={0.8}/>
+                    <stop offset="95%" stopColor="#4ade80" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#1a2d47" />
+                <XAxis dataKey="time" stroke="#8ba7be" fontSize={12} tickFormatter={(t) => new Date(t).toLocaleTimeString()} />
+                <YAxis stroke="#8ba7be" fontSize={12} domain={[0, 15]} />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: '#0f1e33',
+                    border: '1px solid #1a2d47',
+                    borderRadius: '8px',
+                    color: '#e8f4f8'
+                  }}
+                  labelFormatter={(t) => new Date(t).toLocaleTimeString()}
+                />
+                <Area type="step" dataKey="value" stroke="#4ade80" fillOpacity={1} fill="url(#satGradient)" />
+              </AreaChart>
             </ResponsiveContainer>
           </Card>
         </div>

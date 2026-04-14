@@ -1,60 +1,60 @@
 const topics = require("../../shared/constants/topics");
 
+// FIELD AUDIT — CURRENT METER
 module.exports = {
   start: (client, vesselId, shipState) => {
     const dataTopic = topics.CURRENTMETER.buildDataTopic(vesselId, "CM01");
     let tickCount = 0;
     
-    let direction = 0;
-    let waterTemperature = 22.0;
-    let salinity = 34.2;
-    let turbidity = 2.1;
-    
+    // Internal states for propagation
+    let baseSpeed = 0.8;
+    let baseDirection = 45; // NE current
+    let baseTemp = 21.5;
+
     setInterval(() => {
       tickCount++;
       const now = Date.now();
-      
-      const bgDirection = (tickCount / 1200) * 360 % 360;
-      const tidalSpeed = 0.8 + 0.6 * Math.sin(tickCount / 600);
-      const apparentSpeed = tidalSpeed + shipState.speed * 0.08;
-      
-      const speed = Math.max(0.1, Math.min(2.5, apparentSpeed));
-      
-      // Shortest path angle interpolation
-      let angleDiff = bgDirection - direction;
-      angleDiff = ((angleDiff + 180) % 360 + 360) % 360 - 180;
-      direction = (direction + angleDiff * 0.03 + 360) % 360;
-      
-      // Calculate U/V components
-      const dirRad = direction * Math.PI / 180;
+      const t = now / 1000;
+
+      // 1. Tidal & Global Current Evolution
+      // Currents drift slowly in magnitude and direction
+      const tidalOsc = 0.4 * Math.sin(t / 1800); // 30-min tidal cycle
+      const targetSpeed = 1.2 + tidalOsc + 0.2 * Math.cos(t / 5000);
+      const speed = baseSpeed + (targetSpeed - baseSpeed) * 0.01 + (Math.random() - 0.5) * 0.01;
+      baseSpeed = speed;
+
+      const dirDrift = 15 * Math.sin(t / 3600); // 1-hour direction drift
+      const targetDir = (45 + dirDrift + 360) % 360;
+      let dirDiff = ((targetDir - baseDirection + 540) % 360) - 180;
+      const direction = (baseDirection + dirDiff * 0.005 + 360) % 360;
+      baseDirection = direction;
+
+      // 2. Vector Decomposition (Physical components)
+      const dirRad = (direction * Math.PI) / 180;
       const eastward = +(speed * Math.sin(dirRad)).toFixed(3);
       const northward = +(speed * Math.cos(dirRad)).toFixed(3);
-      const upward = +(0.02 * Math.sin(tickCount / 250)).toFixed(3);
-      
-      const targetWaterTemp = 22 - ((shipState.depth || 0) * 0.18) + 0.8 * Math.sin(tickCount / 400);
-      waterTemperature += (targetWaterTemp - waterTemperature) * 0.006;
-      
-      const targetSalinity = 34.2 + ((shipState.depth || 0) * 0.008) + 0.1 * Math.sin(tickCount / 600);
-      salinity += (targetSalinity - salinity) * 0.003;
-      
-      const targetTurbidity = 2.1 + 0.8 * Math.sin(tickCount / 500);
-      turbidity += (targetTurbidity - turbidity) * 0.01;
+      const upward = +(0.05 * Math.sin(t / 300)).toFixed(3);
+
+      // 3. Environmental Persistence
+      const targetTemp = 21.5 + 0.5 * Math.sin(t / 4000) - (shipState.depth / 150);
+      const waterTemp = baseTemp + (targetTemp - baseTemp) * 0.01 + (Math.random() - 0.5) * 0.005;
+      baseTemp = waterTemp;
+
+      const salinity = 34.2 + 0.1 * Math.sin(t / 5000) + (shipState.depth / 300);
+      const turbidity = 1.8 + 0.5 * Math.cos(t / 2000);
 
       const payload = {
-        vesselId,
-        deviceId: "CM01",
-        timestamp: now,
+        vesselId, deviceId: "CM01", timestamp: now,
         speed: +speed.toFixed(2),
         direction: +direction.toFixed(2),
-        eastward,
-        northward,
-        upward,
-        waterTemperature: +waterTemperature.toFixed(2),
+        eastward, northward, upward,
+        waterTemperature: +waterTemp.toFixed(2),
         salinity: +salinity.toFixed(2),
         turbidity: +turbidity.toFixed(2),
         status: "ACTIVE"
       };
-      client.publish(dataTopic, JSON.stringify(payload));
-    }, 1000);
+
+      if (tickCount % 10 === 0) client.publish(dataTopic, JSON.stringify(payload));
+    }, 100); // 10Hz internal, 1Hz publish
   }
 };

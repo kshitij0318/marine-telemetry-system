@@ -1,93 +1,66 @@
 const deviceRegistryService = require("./deviceRegistryService");
 
+// rawVesselData: { vesselId: { deviceId: fullPayload } }
 const rawVesselData = {};
-const aggregatedVesselState = {};
 
-const metricPriority = {
-  depth: ["CTD"],
-  temperature: ["CTD"],
-  salinity: ["CTD"],
-  conductivity: ["CTD"],
-  pressure: ["CTD"],
-
-  latitude: ["GNSS"],
-  longitude: ["GNSS"],
-  heading: ["GNSS"],
-  speed: ["GNSS"],
-  course: ["GNSS"],
-  satellites: ["GNSS"],
-  hdop: ["GNSS"],
-
-  direction: ["CURRENTMETER"],
-  u_component: ["CURRENTMETER"],
-  v_component: ["CURRENTMETER"],
-
-  rpm: ["THRUSTER"],
-  power: ["THRUSTER"],
-  thrust: ["THRUSTER"],
-
-  detections: ["OAS"],
-  range: ["OAS"]
+// Map: sensorType → namespace key in aggregated state
+const SENSOR_TYPE_TO_KEY = {
+  GNSS:        'gnss',
+  CTD:         'ctd',
+  CURRENTMETER:'currentMeter',
+  THRUSTER:    'thruster',
+  OAS:         'oas',
 };
 
 class AggregationService {
   updateRawData(payload) {
     const { vesselId, deviceId } = payload;
-
-    if (!rawVesselData[vesselId]) {
-      rawVesselData[vesselId] = {};
-    }
-
+    if (!vesselId || !deviceId) return;
+    if (!rawVesselData[vesselId]) rawVesselData[vesselId] = {};
     rawVesselData[vesselId][deviceId] = payload;
   }
 
-  resolveMetric(vesselId, metric) {
-    const devices = rawVesselData[vesselId];
-    if (!devices) return null;
-
-    const activeDevices = deviceRegistryService.getActiveDevices(vesselId);
-    const priorityOrder = metricPriority[metric] || [];
-
-    for (let type of priorityOrder) {
-      const match = activeDevices.find(d =>
-        d.type === type &&
-        devices[d.deviceId] &&
-        devices[d.deviceId][metric] !== undefined
-      );
-
-      if (match) {
-        return devices[match.deviceId][metric];
-      }
-    }
-
-    return null;
-  }
-
+  /**
+   * Recompute aggregated state for a vessel.
+   * Instead of a flat merged object (which caused field collisions),
+   * we now produce NAMESPACED sensor data:
+   *   state.gnss, state.ctd, state.currentMeter, state.thruster, state.oas
+   * Each namespace contains ALL fields emitted by that simulator.
+   */
   recomputeVessel(vesselId) {
     if (!rawVesselData[vesselId]) return;
 
-    const metrics = Object.keys(metricPriority);
-    const resolved = {};
+    const activeDevices = deviceRegistryService.getActiveDevices(vesselId);
+    const namespace = {};
 
-    for (let metric of metrics) {
-      resolved[metric] = this.resolveMetric(vesselId, metric);
+    for (const device of activeDevices) {
+      const key = SENSOR_TYPE_TO_KEY[device.type];
+      if (!key) continue;
+      const payload = rawVesselData[vesselId][device.deviceId];
+      if (!payload) continue;
+      // Merge the full payload under the namespace key (last writer wins per sensor type)
+      namespace[key] = { ...payload };
     }
 
-    const activeDevices = deviceRegistryService.getActiveDevices(vesselId);
+    // Preserve any existing namespace keys for inactive sensors
+    // (Keep last known good data, just won't be refreshed)
+    if (!this._aggregated) this._aggregated = {};
+    if (!this._aggregated[vesselId]) this._aggregated[vesselId] = {};
 
-    aggregatedVesselState[vesselId] = {
-      ...resolved,
-      activeSensors: activeDevices.length,
-      lastUpdated: Date.now()
-    };
+    for (const [key, data] of Object.entries(namespace)) {
+      this._aggregated[vesselId][key] = data;
+    }
+
+    this._aggregated[vesselId].activeSensors = activeDevices.length;
+    this._aggregated[vesselId].lastUpdated = Date.now();
   }
 
   getAggregatedState(vesselId) {
-    return aggregatedVesselState[vesselId] || null;
+    return this._aggregated?.[vesselId] || null;
   }
 
   getAllAggregatedStates() {
-    return aggregatedVesselState;
+    return this._aggregated || {};
   }
 }
 

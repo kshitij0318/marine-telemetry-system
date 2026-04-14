@@ -11,24 +11,12 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 export default function OASDashboard() {
   const { sensorData } = useTelemetry();
   
-  const [stats, setStats] = React.useState({ total: 0, maxRange: 0, threatCounts: {low:0, medium:0, high:0} });
-
+  // Statistics now come from backend — no local accumulation needed
   const detectionCountData = useRingBuffer(sensorData.oas.detections.length, 60, 1000);
   const signalData = useRingBuffer(sensorData.oas.performance?.signalStrength ?? 0, 60, 1000);
 
-  React.useEffect(() => {
-    if (sensorData.oas.detections.length > 0) {
-      setStats(prev => ({
-        total: prev.total + sensorData.oas.detections.length,
-        maxRange: Math.max(prev.maxRange, ...sensorData.oas.detections.map(d => d.distance)),
-        threatCounts: {
-          low: prev.threatCounts.low + sensorData.oas.detections.filter(d => d.threat === 'low').length,
-          medium: prev.threatCounts.medium + sensorData.oas.detections.filter(d => d.threat === 'medium').length,
-          high: prev.threatCounts.high + sensorData.oas.detections.filter(d => d.threat === 'high').length,
-        }
-      }));
-    }
-  }, [sensorData.oas.detections]);
+  // Keep local stats only as fallback when backend statistics haven't arrived
+  const backendStats = sensorData.oas.statistics;
 
   const getThreatLevel = () => {
     if (sensorData.oas.detections.length === 0) return 'none';
@@ -224,23 +212,23 @@ export default function OASDashboard() {
             <div className="space-y-3">
               <div className="flex justify-between items-center">
                 <span className="text-sm text-marine-text-secondary">Operating Range</span>
-                <span className="text-sm font-mono text-marine-accent">{sensorData.oas.config?.range ?? sensorData.oas.range}m</span>
+                <span className="text-sm font-mono text-marine-accent">{sensorData.oas.config?.operatingRange ?? sensorData.oas.range}m</span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-sm text-marine-text-secondary">Frequency</span>
-                <span className="text-sm font-mono text-marine-accent">{sensorData.oas.config?.frequency ?? "N/A"}</span>
+                <span className="text-sm font-mono text-marine-accent">{sensorData.oas.config?.frequency != null ? `${sensorData.oas.config.frequency.toFixed(1)} kHz` : 'N/A'}</span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-sm text-marine-text-secondary">Beam Width</span>
-                <span className="text-sm font-mono text-marine-accent">{sensorData.oas.config?.beamWidth ?? "N/A"}°</span>
+                <span className="text-sm font-mono text-marine-accent">{sensorData.oas.config?.beamWidth ?? 'N/A'}°</span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-sm text-marine-text-secondary">Pulse Length</span>
-                <span className="text-sm font-mono text-marine-accent">{sensorData.oas.config?.pulseLength ?? "N/A"}</span>
+                <span className="text-sm font-mono text-marine-accent">{sensorData.oas.config?.pulseLength != null ? `${sensorData.oas.config.pulseLength.toFixed(3)} ms` : 'N/A'}</span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-sm text-marine-text-secondary">Mode</span>
-                <span className="text-sm font-mono text-marine-accent">{sensorData.oas.config?.mode ?? "N/A"}</span>
+                <span className="text-sm font-mono text-marine-accent">{sensorData.oas.config?.mode ?? 'N/A'}</span>
               </div>
             </div>
           </Card>
@@ -272,16 +260,16 @@ export default function OASDashboard() {
             <div className="space-y-3">
               <div className="flex justify-between items-center">
                 <span className="text-sm text-marine-text-secondary">Total Detections</span>
-                <span className="text-sm font-mono text-marine-accent">{stats.total}</span>
+                <span className="text-sm font-mono text-marine-accent">{backendStats?.totalDetections ?? 0}</span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-sm text-marine-text-secondary">Max Range</span>
-                <span className="text-sm font-mono text-marine-accent">{stats.maxRange.toFixed(1)}m</span>
+                <span className="text-sm font-mono text-marine-accent">{(backendStats?.maxRange ?? 0).toFixed(1)}m</span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-sm text-marine-text-secondary">Threat Profile</span>
                 <span className="text-sm font-mono text-marine-accent text-xs">
-                  H:{stats.threatCounts.high} | M:{stats.threatCounts.medium} | L:{stats.threatCounts.low}
+                  H:{backendStats?.threatCounts?.high ?? 0} | M:{backendStats?.threatCounts?.medium ?? 0} | L:{backendStats?.threatCounts?.low ?? 0}
                 </span>
               </div>
             </div>

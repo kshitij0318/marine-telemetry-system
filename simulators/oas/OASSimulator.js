@@ -1,50 +1,29 @@
 const topics = require("../../shared/constants/topics");
 
-/**
- * OAS Simulator — Dynamic, position-relative obstacle generation
- *
- * Feature 5 fix: Removed all hardcoded lat/lng obstacle positions.
- * Obstacles are now spawned dynamically relative to the ship's current
- * position and heading, so the avoidance feature works anywhere in the world.
- *
- * Obstacle lifecycle:
- *  - Every SPAWN_INTERVAL_MS a fresh batch is generated within detection range
- *  - Each obstacle lives for OBSTACLE_TTL_MS then expires
- *  - Obstacles spawn in a forward arc (heading ± SPAWN_HALF_ARC degrees)
- *    at a randomised distance between MIN_SPAWN_DIST and config.range
- */
+// FIELD AUDIT — OAS
+// Field            | Backend emits | Frontend reads | Match? | Action
+// detections       | Yes           | Yes            | Yes    | None
+// range            | Yes           | Yes            | Yes    | None
+// config           | Yes           | Yes            | Yes    | Match verified
+// performance      | Yes           | Yes            | Yes    | Match verified
+// statistics       | Yes           | Yes            | Yes    | None
+// status           | Yes           | Yes            | Yes    | None
 
-// ─── Config ────────────────────────────────────────────────────────────────
+const SPAWN_INTERVAL_MS  = 12000; 
+const OBSTACLE_TTL_MS    = 35000; 
+const SPAWN_HALF_ARC     = 60;    
+const MIN_SPAWN_DIST     = 40;    
+const MAX_OBSTACLES      = 12;    
 
-const SPAWN_INTERVAL_MS  = 8000;  // Spawn new batch every 8 s (tunable)
-const OBSTACLE_TTL_MS    = 25000; // Each obstacle lives 25 s
-const SPAWN_HALF_ARC     = 70;    // degrees either side of heading
-const MIN_SPAWN_DIST     = 30;    // metres — minimum spawn distance
-const MAX_OBSTACLES      = 8;     // cap on concurrent obstacles
-
-// ─── Helpers ────────────────────────────────────────────────────────────────
-
-/** Move lat/lng by `distanceM` metres along `bearingDeg` */
 function destPoint(lat, lng, bearingDeg, distanceM) {
   const R   = 6371e3;
   const d   = distanceM / R;
   const brg = (bearingDeg * Math.PI) / 180;
   const φ1  = (lat * Math.PI) / 180;
   const λ1  = (lng * Math.PI) / 180;
-
-  const φ2 = Math.asin(
-    Math.sin(φ1) * Math.cos(d) +
-    Math.cos(φ1) * Math.sin(d) * Math.cos(brg)
-  );
-  const λ2 = λ1 + Math.atan2(
-    Math.sin(brg) * Math.sin(d) * Math.cos(φ1),
-    Math.cos(d) - Math.sin(φ1) * Math.sin(φ2)
-  );
-
-  return {
-    lat: (φ2 * 180) / Math.PI,
-    lng: (((λ2 * 180) / Math.PI) + 540) % 360 - 180, // normalise to [-180,180]
-  };
+  const φ2 = Math.asin(Math.sin(φ1) * Math.cos(d) + Math.cos(φ1) * Math.sin(d) * Math.cos(brg));
+  const λ2 = λ1 + Math.atan2(Math.sin(brg) * Math.sin(d) * Math.cos(φ1), Math.cos(d) - Math.sin(φ1) * Math.sin(φ2));
+  return { lat: (φ2 * 180) / Math.PI, lng: (((λ2 * 180) / Math.PI) + 540) % 360 - 180 };
 }
 
 function calculateDistance(lat1, lon1, lat2, lon2) {
@@ -53,145 +32,99 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
   const φ2 = (lat2 * Math.PI) / 180;
   const Δφ = ((lat2 - lat1) * Math.PI) / 180;
   const Δλ = ((lon2 - lon1) * Math.PI) / 180;
-  const a  = Math.sin(Δφ / 2) ** 2 +
-             Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) ** 2;
+  const a  = Math.sin(Δφ / 2) ** 2 + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) ** 2;
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
 function calculateBearing(lat1, lon1, lat2, lon2) {
   const y   = Math.sin((lon2 - lon1) * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180);
-  const x   = Math.cos(lat1 * Math.PI / 180) * Math.sin(lat2 * Math.PI / 180) -
-              Math.sin(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-              Math.cos((lon2 - lon1) * Math.PI / 180);
+  const x   = Math.cos(lat1 * Math.PI / 180) * Math.sin(lat2 * Math.PI / 180) - Math.sin(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.cos((lon2 - lon1) * Math.PI / 180);
   return ((Math.atan2(y, x) * 180 / Math.PI) + 360) % 360;
 }
-
-// ─── Simulator ──────────────────────────────────────────────────────────────
 
 module.exports = {
   start: (client, vesselId, shipState) => {
     const dataTopic = topics.OAS.buildDataTopic(vesselId, "OAS01");
-    const config    = {
-      range: 200,
-      frequency: "9.4 GHz",
-      beamWidth: 120,
-      pulseLength: "0.08 µs",
-      mode: "NAVIGATION",
-    };
+    const config    = { operatingRange: 200, frequency: 200.0, beamWidth: 12.5, pulseLength: 0.100, mode: "SURVEY" };
 
-    // Active obstacle store: { id, lat, lng, spawnedAt }
     let activeObstacles = [];
     let obstacleCounter = 0;
-
-    // Smoothed performance metrics (low-pass filtered)
-    let pingRate       = 10;
+    let pingRate = 1.0;
     let signalStrength = 85;
-    let noiseFloor     = 12;
-    let targetStrength = -60;
-    let tickCount      = 0;
-    let totalScans     = 0;
-    let lastSpawnTime  = 0;
+    let noiseFloor = -90;
+    let tickCount = 0;
+    let cumulativeDetectionCount = 0;
+    let lastSpawnTime = 0;
 
-    /**
-     * Spawn a fresh batch of obstacles ahead of the ship.
-     * Replaced hardcoded lat/lng list with dynamic position-relative generation.
-     */
     function spawnObstacles() {
-      const now     = Date.now();
-      const heading = shipState.heading;
-      const count   = 2 + Math.floor(Math.random() * 4); // 2–5 per batch
-
+      const now = Date.now();
+      const count = 2 + Math.floor(Math.random() * 3);
       const newObs = [];
       for (let i = 0; i < count && activeObstacles.length + newObs.length < MAX_OBSTACLES; i++) {
-        // Random bearing within forward arc
-        const bearingOffset = (Math.random() * 2 - 1) * SPAWN_HALF_ARC;
-        const bearing       = (heading + bearingOffset + 360) % 360;
-
-        // Random distance between MIN_SPAWN_DIST and config.range
-        const distance = MIN_SPAWN_DIST + Math.random() * (config.range - MIN_SPAWN_DIST);
-
+        const bearing = (shipState.heading + (Math.random() * 2 - 1) * SPAWN_HALF_ARC + 360) % 360;
+        const distance = MIN_SPAWN_DIST + Math.random() * (config.operatingRange - MIN_SPAWN_DIST - 20);
         const pos = destPoint(shipState.lat, shipState.lng, bearing, distance);
-
-        newObs.push({
-          id:        `OBS-${++obstacleCounter}`,
-          lat:       pos.lat,
-          lng:       pos.lng,
-          spawnedAt: now,
-        });
+        newObs.push({ id: `OBS-${++obstacleCounter}`, lat: pos.lat, lng: pos.lng, spawnedAt: now, driftDir: Math.random() * 360 });
       }
-
       activeObstacles = [...activeObstacles, ...newObs];
-      lastSpawnTime   = now;
+      lastSpawnTime = now;
     }
 
     setInterval(() => {
       const now = Date.now();
       tickCount++;
 
-      // Expire old obstacles
+      // 1. Lifecycle & Drift
       activeObstacles = activeObstacles.filter(o => now - o.spawnedAt < OBSTACLE_TTL_MS);
+      activeObstacles.forEach(o => {
+        // Very slow drift 0.2m/s
+        const driftDist = 0.2 * 0.1;
+        const p = destPoint(o.lat, o.lng, o.driftDir, driftDist);
+        o.lat = p.lat; o.lng = p.lng;
+      });
 
-      // Spawn new batch if interval elapsed or no obstacles remain
-      if (now - lastSpawnTime >= SPAWN_INTERVAL_MS || activeObstacles.length === 0) {
-        spawnObstacles();
-      }
+      if (now - lastSpawnTime >= SPAWN_INTERVAL_MS || activeObstacles.length === 0) spawnObstacles();
 
-      // Build detections from active obstacles within range
+      // 2. Detections
       const detections = [];
-      const headingRad = (shipState.heading * Math.PI) / 180;
-
       for (const obs of activeObstacles) {
         const distance = calculateDistance(shipState.lat, shipState.lng, obs.lat, obs.lng);
-        if (distance > config.range) continue;
-
+        if (distance > config.operatingRange) continue;
         const absoluteBearing = calculateBearing(shipState.lat, shipState.lng, obs.lat, obs.lng);
-        // Relative angle: 0 = dead ahead, clockwise positive
         let relAngle = ((absoluteBearing - shipState.heading + 360) % 360);
+        // Correct for Sonar display: dead ahead is 90 in canvas logic usually,
+        // but frontend SonarDisplay does (det.angle - 90).
+        // If dead ahead is 0 deg from backend: (0 - 90) = -90 rad?
+        // Wait, SonarDisplay uses:
+        // const angle = (det.angle - 90) * Math.PI / 180;
+        // If det.angle is 90, result is 0 rad (straight right).
+        // If det.angle is 0, result is -90 deg (straight up).
+        // So dead ahead should be 0 from backend.
 
-        let threat = "low";
-        if (distance < 50)       threat = "high";
-        else if (distance <= 120) threat = "medium";
-
-        detections.push({
-          id:       obs.id,
-          angle:    +relAngle.toFixed(1),
-          distance: +distance.toFixed(1),
-          threat,
-          worldLat: obs.lat,
-          worldLng: obs.lng,
-        });
+        detections.push({ id: obs.id, angle: +relAngle.toFixed(1), distance: +distance.toFixed(1), threat: distance < 60 ? "high" : distance < 130 ? "medium" : "low" });
       }
+      cumulativeDetectionCount += (tickCount % 10 === 0 ? detections.length : 0);
 
-      totalScans++;
-
-      // Smooth performance metrics
-      const tPing   = 10;
-      const tSig    = 85 + 10 * Math.sin(tickCount / 180);
-      const tNoise  = 12 + 3  * Math.sin(tickCount / 90);
-      const tStr    = detections.length > 0 ? -25 + detections[0].distance * 0.05 : -60;
-
-      pingRate       += (tPing  - pingRate)       * 0.04;
-      signalStrength += (tSig   - signalStrength) * 0.04;
-      noiseFloor     += (tNoise - noiseFloor)     * 0.04;
-      targetStrength += (tStr   - targetStrength) * 0.04;
+      // 3. Performance Evolution
+      pingRate = 1.0 + 0.1 * Math.sin(now / 15000);
+      signalStrength = 85 + 5 * Math.sin(now / 20000) + (Math.random() - 0.5) * 2;
+      noiseFloor = -90 + 3 * Math.cos(now / 25000) + (Math.random() - 0.5) * 1;
+      const targetStr = detections.length > 0 ? -40 + 5 * Math.sin(now / 10000) : -95;
 
       const payload = {
-        vesselId,
-        deviceId: "OAS01",
-        timestamp: now,
-        detections,
-        range: config.range,
-        config,
-        performance: {
-          pingRate:      +pingRate.toFixed(1),
-          signalStrength:+signalStrength.toFixed(1),
-          noiseFloor:    +noiseFloor.toFixed(1),
-          targetStrength:+targetStrength.toFixed(1),
+        vesselId, deviceId: "OAS01", timestamp: now,
+        detections, range: config.operatingRange,
+        config: { ...config, frequency: +(200 + 5 * Math.sin(now / 30000)).toFixed(1), pulseLength: +(0.1 + 0.02 * Math.sin(now / 40000)).toFixed(3) },
+        performance: { pingRate: +pingRate.toFixed(2), signalStrength: +signalStrength.toFixed(1), noiseFloor: +noiseFloor.toFixed(1), targetStrength: +targetStr.toFixed(1) },
+        statistics: {
+          totalDetections: Math.floor(cumulativeDetectionCount),
+          maxRange: detections.length > 0 ? +Math.max(...detections.map(d => d.distance)).toFixed(1) : 0,
+          threatCounts: { high: detections.filter(d => d.threat === 'high').length, medium: detections.filter(d => d.threat === 'medium').length, low: detections.filter(d => d.threat === 'low').length }
         },
-        status: detections.length > 0 ? "ACTIVE" : "SCANNING",
+        status: detections.length > 0 ? "ACTIVE" : "SCANNING"
       };
 
-      client.publish(dataTopic, JSON.stringify(payload));
-    }, 100); // 10 Hz
-  },
+      if (tickCount % 5 === 0) client.publish(dataTopic, JSON.stringify(payload));
+    }, 200);
+  }
 };

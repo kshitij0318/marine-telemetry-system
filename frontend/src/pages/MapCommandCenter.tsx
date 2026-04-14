@@ -1,190 +1,169 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useTelemetry } from '../contexts/TelemetryContext';
-import { Button } from '../app/components/ui/button';
+import { useMission } from '../contexts/MissionContext';
 import { Card } from '../app/components/ui/card';
-import { Tabs, TabsList, TabsTrigger } from '../app/components/ui/tabs';
-import { Navigation, Radar, Route, MapPin, Play, Square, Trash2, AlertTriangle, Eye, EyeOff } from 'lucide-react';
-import { TacticalMapHUD } from './TacticalMap';
-import { SonarDisplay } from './SonarOverlayMap';
-import { RerouteAnimation } from './MissionPlanningMap';
-import { MapContainer, TileLayer, Marker, Polyline, Polygon, useMapEvents, useMap } from 'react-leaflet';
+import { Button } from '../app/components/ui/button';
+import { 
+  Play, Square, MapPin, Navigation, Navigation2, 
+  Settings, Layers, Trash2, AlertTriangle, Eye, EyeOff, Info,
+  Search, Crosshair, ChevronRight, Activity, Zap, X
+} from 'lucide-react';
+import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap, Polygon, Circle, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { MapCanvasOverlay } from './MapCanvasOverlay';
+import { NavigationDestinationPanel } from '../app/components/NavigationDestinationPanel';
+import { computeReroutedPath, calculateDistance } from '../utils/routeUtils';
 import { isOnWater } from '../utils/waterCheck';
 import { useAnimatedVesselPosition } from '../hooks/useAnimatedVesselPosition';
-import { 
-  Waypoint, 
-  AvoidanceZone, 
-  calculateDistance, 
-  computeReroutedPath 
-} from '../utils/routeUtils';
 
-
-// Add CSS for the vessel marker
-if (typeof document !== 'undefined') {
-  const style = document.createElement('style');
-  style.innerHTML = `
-    .vessel-marker-wrapper { background: none; border: none; }
-    .vessel-marker-wrapper .svg-wrapper { transition: transform 0.1s linear; }
-    .avoidance-zone-polygon { stroke: #ef4444; stroke-width: 2; fill: #ef4444; fill-opacity: 0.2; }
-    .route-line { stroke: #00d4ff; stroke-width: 3; stroke-dasharray: 10, 10; animation: dash 20s linear infinite; }
-    .reroute-line { stroke: #00ff41; stroke-width: 3; stroke-dasharray: 10, 10; animation: dash 20s linear infinite; }
-    @keyframes dash { to { stroke-dashoffset: -1000; } }
-  `;
-  document.head.appendChild(style);
+// ── Types ──────────────────────────────────────────────────────────────
+interface Waypoint {
+  id: string;
+  lat: number;
+  lng: number;
+  name: string;
 }
 
-// Moved helpers to src/utils/routeUtils.ts for testability
+interface AvoidanceZone {
+  id: string;
+  points: { lat: number; lng: number }[];
+  area: number;
+  visible: boolean;
+}
 
+interface RerouteAnimation {
+  active: boolean;
+  status: 'rerouting' | 'complete';
+  deltaDistance: number;
+  modifiedWaypoints: number;
+}
 
-function MapInteractionHandler({ mapMode, isDrawingZone, onMapClick, onMapDoubleClick }: any) {
+// ── Map Helpers ─────────────────────────────────────────────────────────
+function ChangeView({ center, zoom, follow }: { center: [number, number], zoom: number, follow: boolean }) {
+  const map = useMap();
+  useEffect(() => {
+    if (follow) {
+      map.setView(center, map.getZoom(), { animate: true, duration: 0.5 });
+    }
+  }, [center, follow, map]);
+  return null;
+}
+
+function MapEvents({ onClick, onDblClick }: { onClick: (latlng: any) => void, onDblClick: (latlng: any) => void }) {
   useMapEvents({
-    click: (e) => onMapClick(e.latlng),
-    dblclick: (e) => onMapDoubleClick(e.latlng)
+    click: (e) => onClick(e.latlng),
+    dblclick: (e) => onDblClick(e.latlng),
   });
   return null;
 }
 
-function RecenterControl({ targetLat, targetLng }: { targetLat: number, targetLng: number }) {
-  const map = useMap();
-  return (
-    <Button 
-      size="sm" 
-      variant="secondary"
-      onClick={() => map.panTo([targetLat, targetLng], { animate: true, duration: 1.0 })}
-      className="absolute top-4 right-4 bg-marine-dark/80 backdrop-blur-sm z-[1000] border border-marine-border hover:bg-marine-accent hover:text-marine-dark transition-colors"
-    >
-      <MapPin className="w-4 h-4 mr-2 text-marine-accent group-hover:text-marine-dark" />
-      Re-center Map
-    </Button>
-  );
-}
+const StatRow = ({ label, value, color = "text-marine-text" }: { label: string, value: string, color?: string }) => (
+  <div className="flex flex-col gap-0.5">
+    <div className="text-[10px] uppercase font-mono text-marine-text-secondary">{label}</div>
+    <div className={`text-sm font-bold truncate ${color}`}>{value}</div>
+  </div>
+);
 
-const VesselMarker = ({ followVessel, animatedPos }: { followVessel: boolean, animatedPos: any }) => {
-  const markerRef = useRef<L.Marker | null>(null);
-  const map = useMap();
-
-  // Create marker once on mount
-  useEffect(() => {
-    const icon = L.divIcon({
-      className: 'vessel-marker-wrapper',
-      html: `<div id="vessel-icon" class="svg-wrapper" style="
-        width: 0; height: 0;
-        border-left: 9px solid transparent;
-        border-right: 9px solid transparent;
-        border-bottom: 26px solid #ff6b00;
-        filter: drop-shadow(0 0 4px #000) drop-shadow(0 0 8px #ff6b00);
-        transform-origin: 50% 66%;
-        position: absolute;
-        top: -13px;
-        left: -9px;
-      "></div>`,
-      iconSize: [0, 0],
-      iconAnchor: [0, 0],
-    });
-
-    const marker = L.marker([animatedPos.lat, animatedPos.lng], { icon, zIndexOffset: 1000 });
-    marker.addTo(map);
-    markerRef.current = marker;
-
-    return () => { marker.remove(); };
-  }, [map]);
-
-  // Update position and rotation on every animation frame (from hook)
-  useEffect(() => {
-    const marker = markerRef.current;
-    if (!marker) return;
-
-    marker.setLatLng([animatedPos.lat, animatedPos.lng]);
-
-    const el = marker.getElement()?.querySelector('#vessel-icon') as HTMLElement;
-    if (el) {
-      el.style.transform = `rotate(${animatedPos.heading}deg) translateX(-50%)`;
-    }
-
-    if (followVessel) {
-      map.panTo([animatedPos.lat, animatedPos.lng], { animate: false });
-    }
-  }, [animatedPos.lat, animatedPos.lng, animatedPos.heading, followVessel, map]);
-
-  return null;
-};
-
+// ── Main Component ──────────────────────────────────────────────────────
 export default function MapCommandCenter() {
-  const { sensorData, sendCommand } = useTelemetry();
+  const { sensorData, sendCommand, missionState, navigationDestination } = useTelemetry();
+  const { startMission: contextStartMission, stopMission: contextStopMission } = useMission();
   const animatedPos = useAnimatedVesselPosition();
-  const [mapMode, setMapMode] = useState<'navigation' | 'tactical' | 'sonar' | 'mission'>('navigation');
-
   
+  const [mapMode, setMapMode] = useState<'navigation' | 'tactical' | 'sonar' | 'mission'>('navigation');
   const [originalWaypoints, setOriginalWaypoints] = useState<Waypoint[]>([]);
   const [reroutedWaypoints, setReroutedWaypoints] = useState<Waypoint[]>([]);
   const [avoidanceZones, setAvoidanceZones] = useState<AvoidanceZone[]>([]);
   const [isDrawingZone, setIsDrawingZone] = useState(false);
   const [currentZonePoints, setCurrentZonePoints] = useState<Array<{ lat: number; lng: number }>>([]);
-  const [isMissionActive, setIsMissionActive] = useState(false);
+  const [followVessel, setFollowVessel] = useState(false);
+  
   const [rerouteAnimation, setRerouteAnimation] = useState<RerouteAnimation>({
     active: false, status: 'complete', deltaDistance: 0, modifiedWaypoints: 0,
   });
-  const [radarSweepAngle, setRadarSweepAngle] = useState(0);
-  const [sonarEchoTrail, setSonarEchoTrail] = useState<Array<{ detections: any[], timestamp: number }>>([]);
+  
   const [checkingWater, setCheckingWater] = useState(false);
   const [landError, setLandError] = useState('');
 
-  // animatedPos is used for UI rendering (Feature 1)
-  // sensorData is used for live telemetry math
+  // ── Dynamic Icons ─────────────────────────────────────────────────────
+  // We re-create the vessel icon to apply rotation directly to the arrow
+  const vesselIcon = useMemo(() => L.divIcon({
+    className: 'custom-vessel-icon',
+    html: `<div class="vessel-marker">
+            <div class="vessel-arrow" style="transform: rotate(${animatedPos.heading}deg)"></div>
+           </div>`,
+    iconSize: [30, 30],
+    iconAnchor: [15, 15],
+  }), [animatedPos.heading]);
 
-// computeReroutedPath is now imported from src/utils/routeUtils.ts
+  const waypointIcon = (name: string, active: boolean) => L.divIcon({
+    className: 'custom-waypoint-icon',
+    html: `<div class="wp-marker ${active ? 'animate-pulse scale-110' : 'opacity-80'}">
+            <div class="wp-dot"></div>
+            <div class="wp-label">${name}</div>
+          </div>`,
+    iconSize: [20, 20],
+    iconAnchor: [10, 10],
+  });
 
-
+  // Rerouting logic (Frontend specific to planning phase)
   useEffect(() => {
     if (avoidanceZones.length > 0) {
       const { newPath, modifiedWPsCount } = computeReroutedPath(originalWaypoints, avoidanceZones);
-      const getDist = (pts: Waypoint[]) => pts.reduce((sum, pt, i) => i === 0 ? 0 : sum + calculateDistance(pts[i-1].lat, pts[i-1].lng, pt.lat, pt.lng), 0);
-      const oldDist = getDist(originalWaypoints);
-      const newDist = getDist(newPath);
-      const delta = Math.round(newDist - oldDist);
-
       if (modifiedWPsCount > 0) {
+        const getDist = (pts: Waypoint[]) => pts.reduce((sum, pt, i) => i === 0 ? 0 : sum + calculateDistance(pts[i-1].lat, pts[i-1].lng, pt.lat, pt.lng), 0);
+        const oldDist = getDist(originalWaypoints);
+        const newDist = getDist(newPath);
+        const delta = Math.round(newDist - oldDist);
+
         setRerouteAnimation({ active: true, status: 'rerouting', deltaDistance: delta, modifiedWaypoints: modifiedWPsCount });
         setTimeout(() => {
           setReroutedWaypoints(newPath);
           setRerouteAnimation({ active: true, status: 'complete', deltaDistance: delta, modifiedWaypoints: modifiedWPsCount });
-          setTimeout(() => {
-            setRerouteAnimation({ active: false, status: 'complete', deltaDistance: delta, modifiedWaypoints: modifiedWPsCount });
-          }, 2000);
+          setTimeout(() => setRerouteAnimation(p => ({ ...p, active: false })), 2000);
         }, 300);
       } else {
         setReroutedWaypoints(originalWaypoints);
       }
     } else {
-       setReroutedWaypoints(originalWaypoints);
+      setReroutedWaypoints(originalWaypoints);
     }
   }, [avoidanceZones, originalWaypoints]);
 
-  const activeWaypoints = reroutedWaypoints.length > 0 ? reroutedWaypoints : originalWaypoints;
-
-  const [followVessel, setFollowVessel] = useState(false);
+  // SINGLE SOURCE OF TRUTH: If mission is active, use backend waypoints. Otherwise planning ones.
+  const activeWaypoints = (missionState?.active && missionState.waypoints) ? missionState.waypoints : (reroutedWaypoints.length > 0 ? reroutedWaypoints : originalWaypoints);
 
   const startMission = () => {
-    sendCommand({
-      type: 'START_MISSION',
-      waypoints: activeWaypoints.map(wp => ({ lat: wp.lat, lng: wp.lng }))
+    const planningWaypoints = reroutedWaypoints.length > 0 ? reroutedWaypoints : originalWaypoints;
+    if (planningWaypoints.length < 2) return;
+    
+    // MUTUAL EXCLUSION: Mission overrides Navigation
+    sendCommand({ type: 'CLEAR_NAVIGATION_DESTINATION', vesselId: 'V001' });
+
+    contextStartMission({
+      type: 'mission_planning',
+      ownerPage: 'mission',
+      waypoints: planningWaypoints.map(wp => ({ id: wp.id, lat: wp.lat, lng: wp.lng, name: wp.name })),
+      avoidanceZones,
+      reroutedWaypoints: reroutedWaypoints.length > 0 ? reroutedWaypoints.map(wp => ({ lat: wp.lat, lng: wp.lng })) : [],
+      active: true,
+      estimatedDistance: 0,
+      estimatedDuration: 0
     });
-    setIsMissionActive(true);
+    
     setFollowVessel(true);
   };
 
-  const stopMission = () => {
-    sendCommand({ type: 'STOP_MISSION' });
-    setIsMissionActive(false);
-    setFollowVessel(false);
-  };
+  // Reactive State Handoff: Only clear planning path when backend confirms mission is active
+  useEffect(() => {
+    if (missionState?.active) {
+      setOriginalWaypoints([]);
+      setReroutedWaypoints([]);
+    }
+  }, [missionState?.active]);
 
   const handleMapClick = async (latlng: any) => {
-    if (checkingWater) return; // Debounce during API check
-
-    // Validate water before accepting any click in mission or zone drawing modes
+    if (checkingWater) return;
     if (isDrawingZone || mapMode === 'mission') {
       setCheckingWater(true);
       try {
@@ -194,16 +173,12 @@ export default function MapCommandCenter() {
           setTimeout(() => setLandError(''), 4000);
           return;
         }
-      } catch {
-        // API failed — allow placement (fail-open)
-      } finally {
-        setCheckingWater(false);
-      }
+      } catch { /* fail open */ } finally { setCheckingWater(false); }
     }
 
     if (isDrawingZone) {
       setCurrentZonePoints([...currentZonePoints, { lat: latlng.lat, lng: latlng.lng }]);
-    } else if (mapMode === 'mission') {
+    } else if (mapMode === 'mission' && !missionState?.active && !navigationDestination?.set) {
       const newWaypoint: Waypoint = {
         id: `wp-${Date.now()}`,
         lat: latlng.lat,
@@ -214,21 +189,13 @@ export default function MapCommandCenter() {
     }
   };
 
-  const handleMapDoubleClick = () => {
-    if (isDrawingZone && currentZonePoints.length >= 3) {
-      // Area approximation native math
-      let area = 0;
-      for (let i = 0; i < currentZonePoints.length; i++) {
-        const j = (i + 1) % currentZonePoints.length;
-        area += currentZonePoints[i].lng * currentZonePoints[j].lat;
-        area -= currentZonePoints[j].lng * currentZonePoints[i].lat;
-      }
-      area = Math.abs(area / 2) * 111320 * 111320;
-
+  const handleMapDblClick = (latlng: any) => {
+    if (isDrawingZone && currentZonePoints.length >= 2) {
+      const finalPoints = [...currentZonePoints, { lat: latlng.lat, lng: latlng.lng }];
       const newZone: AvoidanceZone = {
         id: `zone-${Date.now()}`,
-        points: currentZonePoints,
-        area,
+        points: finalPoints,
+        area: 0,
         visible: true,
       };
       setAvoidanceZones([...avoidanceZones, newZone]);
@@ -237,311 +204,293 @@ export default function MapCommandCenter() {
     }
   };
 
-  const toggleZoneVisibility = (id: string) => {
-    setAvoidanceZones(zones => zones.map(zone => zone.id === id ? { ...zone, visible: !zone.visible } : zone));
+  const removeWaypoint = (id: string) => {
+    const updated = originalWaypoints.filter(wp => wp.id !== id);
+    setOriginalWaypoints(updated);
   };
-  const deleteZone = (id: string) => setAvoidanceZones(zones => zones.filter(zone => zone.id !== id));
-  const removeWaypoint = (id: string) => setOriginalWaypoints(wps => wps.filter(wp => wp.id !== id));
 
-  const getTotalDistance = () => {
-    if (activeWaypoints.length < 2) return 0;
-    let total = 0;
-    for (let i = 0; i < activeWaypoints.length - 1; i++) {
-      total += calculateDistance(activeWaypoints[i].lat, activeWaypoints[i].lng, activeWaypoints[i + 1].lat, activeWaypoints[i + 1].lng);
-    }
-    return total;
-  };
   const getETA = () => {
-    const speed = sensorData.gnss.speed * 0.514444; 
-    if (speed === 0) return 'N/A';
-    const seconds = getTotalDistance() / speed;
-    return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
+    if (!missionState?.eta || missionState.eta === Infinity) return 'N/A';
+    return new Date(Date.now() + missionState.eta * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
-
-  // Feature 7: Radar sweep animation (synchronized with RadarDisplay.tsx)
-  useEffect(() => {
-    let frameId: number;
-    let angle = radarSweepAngle;
-    const sweep = () => {
-      // 1.5 degrees per frame at 60fps consistent with RadarDisplay
-      angle = (angle + 1.5) % 360;
-      setRadarSweepAngle(angle);
-      frameId = requestAnimationFrame(sweep);
-    };
-    frameId = requestAnimationFrame(sweep);
-    return () => cancelAnimationFrame(frameId);
-  }, []);
-
-  // Sonar trail maintenance
-  useEffect(() => {
-    if (mapMode === 'sonar' && sensorData.oas.detections && sensorData.oas.detections.length > 0) {
-      setSonarEchoTrail(prev => {
-        const newTrail = [{ detections: sensorData.oas.detections, timestamp: Date.now() }, ...prev.filter(item => Date.now() - item.timestamp < 5000)];
-        return newTrail.slice(0, 10);
-      });
-    }
-  }, [sensorData.oas.detections, mapMode]);
-
-  // Dot icon for waypoints
-  const dotIcon = L.divIcon({ html: '<div style="width:12px;height:12px;background:#00d4ff;border-radius:50%;border:2px solid #fff;box-shadow:0 0 10px #00d4ff;"></div>', className: 'wp-icon', iconSize: [12, 12], iconAnchor: [6, 6] });
-
-  // Map Tiles
-  const isDarkMap = mapMode === 'tactical' || mapMode === 'sonar';
-  const tileUrl = isDarkMap ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png' : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+  const getDuration = () => {
+    const s = missionState?.eta;
+    if (!s || s === Infinity) return 'N/A';
+    const h = Math.floor(s/3600), m = Math.floor((s%3600)/60);
+    return h > 0 ? `${h}h ${m}m` : `${m}m`;
+  };
 
   return (
-    <div className="relative w-full h-[calc(100vh-4rem)] bg-marine-surface overflow-hidden">
-      
-      {/* Land placement error banner */}
-      {landError && (
-        <div
-          className="absolute left-1/2 -translate-x-1/2 px-5 py-3 rounded-xl text-sm font-semibold text-white shadow-xl flex items-center gap-3 animate-fade-in"
-          style={{ top: 72, zIndex: 1200, background: 'rgba(220,38,38,0.92)', backdropFilter: 'blur(8px)', border: '1px solid #ff3b3b' }}
-        >
-          <AlertTriangle className="w-5 h-5 shrink-0" />
-          {landError}
-          <button onClick={() => setLandError('')} className="ml-2 opacity-70 hover:opacity-100 text-lg leading-none">&times;</button>
-        </div>
-      )}
-
-      {/* Water check loading indicator */}
-      {checkingWater && (
-        <div
-          className="absolute left-1/2 -translate-x-1/2 px-4 py-2 rounded-xl text-xs font-mono text-marine-accent bg-marine-dark/80 border border-marine-border backdrop-blur-sm"
-          style={{ top: 72, zIndex: 1200 }}
-        >
-          Checking location…
-        </div>
-      )}
-
-      {/* Map always mounted, never unmounts */}
-      <div 
-        className="absolute inset-0" 
-        style={{ zIndex: 0, visibility: mapMode === 'sonar' ? 'hidden' : 'visible' }}
-      >
+    <div className="relative h-screen bg-marine-dark overflow-hidden flex flex-col">
+      <div className="flex-1 relative">
         <MapContainer 
           center={[animatedPos.lat, animatedPos.lng]} 
           zoom={14} 
-          style={{ width: '100%', height: '100%' }}
+          className="h-full w-full z-0"
           zoomControl={false}
-          doubleClickZoom={!isDrawingZone}
         >
-          <TileLayer 
-            key={isDarkMap ? 'dark' : 'light'} 
-            url={tileUrl} 
-            attribution="&copy; OpenStreetMap contributors" 
-          />
-          <MapInteractionHandler mapMode={mapMode} isDrawingZone={isDrawingZone} onMapClick={handleMapClick} onMapDoubleClick={handleMapDoubleClick} />
-          <RecenterControl targetLat={animatedPos.lat} targetLng={animatedPos.lng} />
+          <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" />
+          <ChangeView center={[animatedPos.lat, animatedPos.lng]} zoom={14} follow={followVessel} />
+          <MapEvents onClick={handleMapClick} onDblClick={handleMapDblClick} />
 
+          {/* Vessel */}
+          <Marker position={[animatedPos.lat, animatedPos.lng]} icon={vesselIcon} />
 
-          {/* Overlays dynamically rendering Tact, Radar */}
-          <MapCanvasOverlay 
-            mapMode={mapMode} 
-            sensorData={sensorData} 
-            radarSweepAngle={radarSweepAngle} 
-            sonarEchoTrail={sonarEchoTrail} 
-          />
-
-          <VesselMarker followVessel={followVessel} animatedPos={animatedPos} />
-
-
-          {/* Mission Elements overlay inside Leaflet */}
-          {mapMode === 'mission' && (
+          {/* Navigation Destination Line & Marker */}
+          {navigationDestination?.set && (
             <>
-              {activeWaypoints.map(wp => (
-                <Marker
-                  key={wp.id}
-                  position={[wp.lat, wp.lng] as [number,number]}
-                  icon={dotIcon}
-                  draggable
-                  eventHandlers={{
-                    dragend(e) {
-                      const newPos = (e.target as L.Marker).getLatLng();
-                      setOriginalWaypoints(wps => wps.map(w => w.id === wp.id ? { ...w, lat: newPos.lat, lng: newPos.lng } : w));
-                    }
-                  }}
-                />
-              ))}
-              
-              {originalWaypoints.length > 1 && (
-                <Polyline positions={originalWaypoints.map(wp => [wp.lat, wp.lng] as [number,number])} pathOptions={{ color: '#00d4ff', weight: 2, dashArray: '6 4' }} />
-              )}
-              
-              {reroutedWaypoints.length > 1 && reroutedWaypoints !== originalWaypoints && (
-                <Polyline positions={reroutedWaypoints.map(wp => [wp.lat, wp.lng] as [number,number])} pathOptions={{ color: '#ff8c00', weight: 2, dashArray: '6 4' }} />
-              )}
-
-              {avoidanceZones.map(zone => zone.visible && (
-                <Polygon key={zone.id} positions={zone.points.map(p => [p.lat, p.lng] as [number,number])} pathOptions={{ color: '#ff3b3b', fillColor: '#ff3b3b', fillOpacity: 0.15, weight: 2 }} />
-              ))}
-
-              {isDrawingZone && currentZonePoints.length > 0 && (
-                <Polyline positions={currentZonePoints.map(p => [p.lat, p.lng] as [number,number])} pathOptions={{ color: '#ff3b3b', weight: 2, dashArray: '4 4' }} />
-              )}
+              <Marker position={[navigationDestination.lat, navigationDestination.lng]} 
+                icon={L.divIcon({
+                  className: 'nav-dest-marker',
+                  html: `<div class="bg-marine-accent p-1 rounded-full animate-bounce shadow-lg shadow-marine-accent/50"><div class="w-2 h-2 bg-white rounded-full"></div></div>`,
+                  iconSize: [20, 20],
+                  iconAnchor: [10, 20]
+                })} 
+              />
+              <Polyline 
+                positions={[[animatedPos.lat, animatedPos.lng], [navigationDestination.lat, navigationDestination.lng]]}
+                pathOptions={{ color: '#00a8cc', weight: 2, dashArray: '8, 8', opacity: 0.6 }}
+              />
             </>
           )}
+
+          {/* Mission Waypoints & Path */}
+          <Polyline 
+            positions={activeWaypoints.map(wp => [wp.lat, wp.lng])} 
+            pathOptions={{ color: missionState?.active ? '#00ff9d' : '#00a8cc', weight: 3, lineJoin: 'round', opacity: 0.8 }} 
+          />
+          {activeWaypoints.map((wp, i) => (
+            <Marker key={wp.id} position={[wp.lat, wp.lng]} icon={waypointIcon(wp.name, i === missionState?.currentWaypointIndex)} />
+          ))}
+
+          {/* Avoidance Zones */}
+          {avoidanceZones.filter(z => z.visible).map(zone => (
+            <Polygon key={zone.id} positions={zone.points.map(p => [p.lat, p.lng])} pathOptions={{ color: '#ef4444', fillColor: '#ef4444', fillOpacity: 0.3, weight: 2 }} />
+          ))}
+          {currentZonePoints.length > 0 && (
+            <Polyline positions={currentZonePoints.map(p => [p.lat, p.lng])} pathOptions={{ color: '#ef4444', weight: 2, dashArray: '5, 5' }} />
+          )}
         </MapContainer>
-      </div>
 
-      {/* Tab bar floats above map */}
-      <div className="absolute top-0 left-0 right-0" style={{ zIndex: 1000 }}>
-        <Tabs value={mapMode} onValueChange={(v) => setMapMode(v as any)} className="w-full">
-          <TabsList className="w-full bg-marine-dark/90 backdrop-blur-sm border-b border-marine-border rounded-none justify-start px-4">
-            <TabsTrigger value="navigation" className="flex items-center gap-2"><Navigation className="w-4 h-4" />Navigation</TabsTrigger>
-            <TabsTrigger value="tactical" className="flex items-center gap-2"><Radar className="w-4 h-4" />Tactical</TabsTrigger>
-            <TabsTrigger value="sonar" className="flex items-center gap-2"><Radar className="w-4 h-4" />Sonar Overlay</TabsTrigger>
-            <TabsTrigger value="mission" className="flex items-center gap-2"><Route className="w-4 h-4" />Mission Planning</TabsTrigger>
-          </TabsList>
-        </Tabs>
-      </div>
-
-      {/* Mode-specific HUD panels */}
-      {mapMode === 'sonar' && (
-        <div className="absolute inset-0" style={{ zIndex: 500, backgroundColor: '#0a0f1e' }}>
-          <SonarDisplay />
+        {/* Floating Controls */}
+        <div className="absolute top-4 right-4 z-[1000] flex flex-col gap-2">
+          <Card className="bg-marine-dark/90 backdrop-blur-md border-marine-border p-2 flex flex-col gap-1 shadow-2xl">
+            <Button size="icon" variant={mapMode === 'navigation' ? 'default' : 'ghost'} onClick={() => setMapMode('navigation')} className="w-10 h-10">
+              <Navigation2 className="w-5 h-5" title="Navigation Mode" />
+            </Button>
+            <Button size="icon" variant={mapMode === 'mission' ? 'default' : 'ghost'} onClick={() => setMapMode('mission')} className="w-10 h-10">
+              <Play className="w-5 h-5" title="Mission Planning" />
+            </Button>
+            <Button size="icon" variant={mapMode === 'tactical' ? 'default' : 'ghost'} onClick={() => setMapMode('tactical')} className="w-10 h-10">
+              <Layers className="w-5 h-5" title="Tactical Layers" />
+            </Button>
+            <div className="h-px bg-marine-border my-1" />
+            <Button size="icon" variant={followVessel ? 'default' : 'ghost'} onClick={() => setFollowVessel(!followVessel)} className={`w-10 h-10 ${followVessel ? 'text-marine-accent' : ''}`}>
+              <Crosshair className="w-5 h-5" title="Follow Vessel" />
+            </Button>
+          </Card>
         </div>
-      )}
 
-      {mapMode === 'tactical' && (
-        <div className="absolute top-16 left-4" style={{ zIndex: 1000 }}>
-          <TacticalMapHUD sensorData={sensorData} />
-        </div>
-      )}
-
-      {mapMode === 'mission' && (
-        <>
-          <div className="absolute top-16 left-4 bg-marine-dark/80 backdrop-blur-sm p-3 rounded-lg border border-marine-border z-[1000]">
-            <div className="text-xs text-marine-text-secondary mb-2">{isDrawingZone ? 'Click to place vertices, double-click to finish' : 'Click map to add waypoints'}</div>
-            <div className="flex gap-2">
-              {!isDrawingZone && (
-                <>
-                  <Button size="sm" variant={isMissionActive ? "destructive" : "default"} onClick={isMissionActive ? stopMission : startMission} className="flex items-center gap-2">
-                    {isMissionActive ? <><Square className="w-3 h-3" />Stop Mission</> : <><Play className="w-3 h-3" />Start Mission</>}
-                  </Button>
-                  <Button size="sm" variant="outline" onClick={() => setIsDrawingZone(true)} className="flex items-center gap-2 border-red-500/50 hover:border-red-500 hover:bg-red-500/10">
-                    <AlertTriangle className="w-3 h-3 text-red-400" />Draw Zone
-                  </Button>
-                  <Button size="sm" variant="outline" onClick={() => { setOriginalWaypoints([]); setReroutedWaypoints([]); }} className="flex items-center gap-2">
-                    <Trash2 className="w-3 h-3" />Clear
-                  </Button>
-                </>
-              )}
-              {isDrawingZone && (
-                <Button size="sm" variant="destructive" onClick={() => { setIsDrawingZone(false); setCurrentZonePoints([]); }} className="flex items-center gap-2">
-                  Cancel
-                </Button>
-              )}
-            </div>
-          </div>
-
-          <div className="absolute top-16 right-4 w-80 bg-marine-dark/80 backdrop-blur-sm p-4 rounded-lg border border-marine-border z-[1000] flex flex-col gap-4 max-h-[calc(100vh-10rem)]">
-            <h3 className="text-lg font-semibold text-marine-text flex items-center gap-2">
-              <MapPin className="w-5 h-5 text-marine-accent" />
-              Waypoints
-            </h3>
-
-            <div className="p-3 bg-marine-surface rounded-lg border border-marine-border text-sm space-y-2">
-              <div className="flex justify-between">
-                <span className="text-marine-text-secondary">Total Distance:</span>
-                <span className="text-marine-accent font-mono">{(getTotalDistance() / 1000).toFixed(2)} km</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-marine-text-secondary">ETA:</span>
-                <span className="text-marine-accent font-mono">{getETA()}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-marine-text-secondary">Waypoints:</span>
-                <span className="text-marine-accent font-mono">{activeWaypoints.length}</span>
-              </div>
-            </div>
-
-            <div className="space-y-2 overflow-y-auto flex-1">
-              {activeWaypoints.map((wp, index) => (
-                <div key={wp.id} className="p-3 bg-marine-surface rounded-lg border border-marine-border hover:border-marine-accent transition-colors">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-marine-accent font-semibold">{wp.name}</span>
-                    <Button size="sm" variant="ghost" onClick={() => removeWaypoint(wp.id)} className="h-6 w-6 p-0 hover:bg-red-500/20">
-                      <Trash2 className="w-3 h-3 text-red-400" />
-                    </Button>
-                  </div>
-                  <div className="text-xs text-marine-text-secondary font-mono space-y-1">
-                    <div>Lat: {wp.lat.toFixed(6)}°</div>
-                    <div>Lng: {wp.lng.toFixed(6)}°</div>
-                    {index === 0 && (
-                      <div className="text-marine-accent mt-1">
-                        Distance: {(calculateDistance(animatedPos.lat, animatedPos.lng, wp.lat, wp.lng) / 1000).toFixed(2)} km
-
-                      </div>
-                    )}
-                  </div>
+        {/* Mission Planning Panel */}
+        {mapMode === 'mission' && (
+          <div className="absolute top-4 left-4 z-[1000] flex flex-col gap-3 w-80 max-h-[calc(100vh-8rem)]">
+            <Card className="bg-marine-dark/90 backdrop-blur-md border-marine-border p-4 shadow-2xl flex flex-col gap-4 overflow-hidden">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-bold text-marine-text tracking-tight uppercase">Mission Control</h3>
+                <div className="flex items-center gap-1.5">
+                  <div className={`w-2 h-2 rounded-full ${missionState?.active ? 'bg-green-500 animate-pulse' : 'bg-marine-text-secondary'}`} />
+                  <span className="text-[10px] font-mono text-marine-text-secondary">{missionState?.active ? 'ACTIVE' : 'IDLE'}</span>
                 </div>
-              ))}
-              {activeWaypoints.length === 0 && <div className="text-center text-marine-text-secondary text-sm py-8">Click map to start route</div>}
-            </div>
+              </div>
 
-            {avoidanceZones.length > 0 && (
-              <div className="space-y-2 max-h-40 overflow-y-auto">
-                <h3 className="text-sm font-semibold text-red-400 flex items-center gap-2 mb-2"><AlertTriangle className="w-4 h-4" />Avoidance Zones</h3>
-                {avoidanceZones.map((zone, index) => (
-                  <div key={zone.id} className="p-2 bg-marine-surface rounded-lg border border-red-500/30">
-                    <div className="flex items-center justify-between">
-                      <span className="text-red-400 font-mono text-xs">ZONE-{index + 1}</span>
-                      <div className="flex gap-1">
-                        <Button size="sm" variant="ghost" onClick={() => toggleZoneVisibility(zone.id)} className="h-5 w-5 p-0">
-                          {zone.visible ? <Eye className="w-3 h-3 text-marine-accent" /> : <EyeOff className="w-3 h-3 text-marine-text-secondary" />}
-                        </Button>
-                        <Button size="sm" variant="ghost" onClick={() => deleteZone(zone.id)} className="h-5 w-5 p-0">
-                          <Trash2 className="w-3 h-3 text-red-400" />
-                        </Button>
+              <div className="flex gap-2">
+                {!missionState?.active ? (
+                  <Button onClick={startMission} className="flex-1 bg-marine-accent hover:bg-marine-accent/80 text-white font-bold h-9" disabled={originalWaypoints.length < 2}>
+                    <Play className="w-4 h-4 mr-2" /> Start Mission
+                  </Button>
+                ) : (
+                  <Button onClick={() => contextStopMission('mission')} variant="destructive" className="flex-1 font-bold h-9">
+                    <Square className="w-4 h-4 mr-2" /> Stop Mission
+                  </Button>
+                )}
+                <Button size="icon" variant="outline" onClick={() => { setOriginalWaypoints([]); setReroutedWaypoints([]); setAvoidanceZones([]); }} className="w-9 h-9 border-marine-border">
+                  <Trash2 className="w-4 h-4" />
+                </Button>
+              </div>
+
+              {landError && (
+                <div className="p-2.5 bg-red-500/10 border border-red-500/20 rounded text-[11px] text-red-400 flex items-start gap-2 animate-in fade-in slide-in-from-top-1">
+                  <AlertTriangle className="w-3 h-3 mt-0.5 flex-shrink-0" />
+                  <span>{landError}</span>
+                </div>
+              )}
+
+              {/* Waypoint List with Scrolling */}
+              <div className="flex flex-col gap-2 overflow-y-auto pr-1 custom-scrollbar min-h-0 flex-1">
+                {activeWaypoints.map((wp, i) => (
+                  <div key={wp.id} className={`group p-2.5 rounded border transition-all ${
+                    i === missionState?.currentWaypointIndex ? 'bg-marine-accent/10 border-marine-accent' : 
+                    missionState?.completedWaypoints.includes(wp.id) ? 'bg-green-500/5 border-green-500/20 opacity-60' :
+                    'bg-marine-surface border-marine-border hover:border-marine-text-secondary'
+                  }`}>
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center gap-2">
+                        <span className={`text-[10px] font-bold h-4 w-4 rounded-full flex items-center justify-center ${
+                          i === missionState?.currentWaypointIndex ? 'bg-marine-accent text-white' : 'bg-marine-border text-marine-text-secondary'
+                        }`}>{i + 1}</span>
+                        <span className="text-xs font-semibold text-marine-text">{wp.name}</span>
                       </div>
+                      {!missionState?.active && (
+                        <button onClick={() => removeWaypoint(wp.id)} className="opacity-0 group-hover:opacity-100 transition-opacity p-1 text-red-400 hover:bg-red-500/10 rounded">
+                          <X size={12} />
+                        </button>
+                      )}
+                    </div>
+                    <div className="text-[10px] font-mono text-marine-text-secondary flex justify-between">
+                      <span>{wp.lat.toFixed(5)}°N</span>
+                      <span>{wp.lng.toFixed(5)}°E</span>
                     </div>
                   </div>
                 ))}
+                
+                {activeWaypoints.length === 0 && (
+                  <div className="py-8 flex flex-col items-center justify-center text-center gap-2 border border-dashed border-marine-border rounded-lg">
+                    <MapPin className="w-6 h-6 text-marine-text-secondary/30" />
+                    <p className="text-[11px] text-marine-text-secondary px-4">Click locations on map to create mission waypoints</p>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-        </>
-      )}
 
+              {/* Shared Live Stats */}
+              <div className="grid grid-cols-2 gap-3 pt-3 border-t border-marine-border">
+                <StatRow label="Remaining" value={`${((missionState?.distanceRemaining || 0)/1000).toFixed(2)} km`} color="text-marine-accent" />
+                <StatRow label="ETA" value={getETA()} color="text-marine-accent" />
+                <StatRow label="Duration" value={getDuration()} />
+                <StatRow label="Status" value={missionState?.active ? 'En Route' : 'Standing By'} />
+              </div>
+            </Card>
+
+            {/* Avoidance Tool */}
+            <Card className="bg-marine-dark/90 backdrop-blur-md border-marine-border p-4 shadow-2xl">
+               <div className="flex items-center justify-between mb-3">
+                 <h3 className="text-[10px] font-bold text-marine-text uppercase tracking-widest">Zone Management</h3>
+                 <Button size="sm" variant={isDrawingZone ? 'destructive' : 'outline'} onClick={() => {
+                   if(isDrawingZone) setCurrentZonePoints([]);
+                   setIsDrawingZone(!isDrawingZone);
+                 }} className="h-7 text-[10px] px-2 font-bold uppercase">
+                   {isDrawingZone ? 'Cancel' : '+ Def Zone'}
+                 </Button>
+               </div>
+               
+               {isDrawingZone && (
+                 <div className="text-[10px] text-amber-400 bg-amber-400/5 p-2 rounded border border-amber-400/20 mb-2 font-mono">
+                   Click map to add corners. Double-click to close zone.
+                 </div>
+               )}
+
+               <div className="flex flex-wrap gap-1.5">
+                 {avoidanceZones.map((zone, idx) => (
+                   <div key={zone.id} className="flex items-center gap-1 bg-red-500/10 border border-red-500/30 px-2 py-0.5 rounded-full">
+                     <span className="text-[9px] font-bold text-red-100">Z-{idx+1}</span>
+                     <button onClick={() => setAvoidanceZones(p => p.filter(z => z.id !== zone.id))} className="text-red-400 hover:text-red-200">
+                       <Trash2 size={10} />
+                     </button>
+                   </div>
+                 ))}
+               </div>
+            </Card>
+          </div>
+        )}
+
+        {/* Navigation Mode Panel */}
+        {mapMode === 'navigation' && <NavigationDestinationPanel />}
+
+        {/* Global HUD Bottom Left */}
+        <div className="absolute bottom-6 left-6 z-[1000] flex flex-col gap-3">
+          <Card className="bg-marine-dark/90 backdrop-blur-md border-marine-border p-3 shadow-2xl overflow-hidden min-w-[220px]">
+            <div className="flex items-center gap-3 mb-3 border-b border-marine-border pb-2">
+              <div className="p-1.5 bg-marine-accent/10 rounded">
+                <Activity className="w-4 h-4 text-marine-accent" />
+              </div>
+              <div>
+                <div className="text-[9px] font-bold text-marine-text-secondary uppercase">Vessel Telemetry</div>
+                <div className="text-xs font-bold text-marine-text tracking-wide">{(sensorData.gnss.speed || 0).toFixed(1)} kts @ {(sensorData.gnss.heading || 0).toFixed(0)}°</div>
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-y-3 gap-x-4">
+              <StatRow label="Lat" value={animatedPos.lat.toFixed(6)} />
+              <StatRow label="Lng" value={animatedPos.lng.toFixed(6)} />
+              <StatRow label="Depth" value={`${sensorData.ctd.depth.toFixed(1)}m`} />
+              <StatRow label="Status" value={sensorData.gnss.status.toUpperCase()} color={sensorData.gnss.status === 'active' ? 'text-green-400' : 'text-red-400'} />
+            </div>
+          </Card>
+        </div>
+
+        {/* Navigation Indicator (Bottom Center) - Only if nav set */}
+        {navigationDestination?.set && (
+          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-[1000]">
+             <Card className="bg-marine-accent/90 backdrop-blur-md border-white/20 px-6 py-2.5 shadow-2xl flex items-center gap-8 rounded-full">
+               <div className="flex flex-col items-center">
+                 <div className="text-[9px] uppercase font-bold text-white/60">Dist Remaining</div>
+                 <div className="text-lg font-bold text-white leading-none">{(navigationDestination.distanceRemaining / 1000).toFixed(2)} km</div>
+               </div>
+               <div className="w-px h-6 bg-white/20" />
+               <div className="flex flex-col items-center">
+                 <div className="text-[9px] uppercase font-bold text-white/60">Arriv. ETA</div>
+                 <div className="text-lg font-bold text-white leading-none">
+                   {new Date(Date.now() + navigationDestination.eta * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                 </div>
+               </div>
+             </Card>
+          </div>
+        )}
+      </div>
+      
+      {/* Reroute Overlay */}
       {rerouteAnimation.active && (
-        <div className="absolute top-20 left-1/2 transform -translate-x-1/2 backdrop-blur-md p-3 rounded-lg border z-[1000]">
-          {rerouteAnimation.status === 'rerouting' ? (
-            <div className="flex items-center gap-2 bg-amber-900/40 border-amber-500/50 px-4 py-2 rounded-lg animate-pulse">
-              <div className="w-2 h-2 bg-amber-400 rounded-full animate-ping"></div>
-              <span className="text-amber-200 text-sm font-mono">Rerouting...</span>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2 bg-green-900/40 border-green-500/50 px-4 py-2 rounded-lg">
-              <div className="w-2 h-2 bg-green-400 rounded-full"></div>
-              <span className="text-green-200 text-sm font-mono">Path Updated</span>
-              <span className="text-marine-text-secondary text-xs">+{rerouteAnimation.deltaDistance}m</span>
-            </div>
-          )}
+        <div className="absolute top-24 left-1/2 -translate-x-1/2 z-[2000] animate-in slide-in-from-top-4 duration-300">
+           <div className={`px-4 py-2 rounded-full border shadow-xl flex items-center gap-3 backdrop-blur-md ${
+             rerouteAnimation.status === 'rerouting' ? 'bg-amber-500/20 border-amber-500/50' : 'bg-green-500/20 border-green-500/50'
+           }`}>
+             <Zap className={`w-4 h-4 ${rerouteAnimation.status === 'rerouting' ? 'text-amber-400 animate-spin' : 'text-green-400'}`} />
+             <div className="flex flex-col">
+               <span className="text-[10px] font-bold text-white uppercase tracking-tighter">
+                 {rerouteAnimation.status === 'rerouting' ? 'Computing Tactical Reroute...' : 'Reroute Optimized'}
+               </span>
+               <span className="text-[10px] text-white/60 font-mono">
+                 {rerouteAnimation.status === 'rerouting' ? 'Analyzing zones...' : `+${rerouteAnimation.deltaDistance}m delta / ${rerouteAnimation.modifiedWaypoints} points`}
+               </span>
+             </div>
+           </div>
         </div>
       )}
 
-      {/* Global Bottom HUD */}
-      {mapMode !== 'sonar' && (
-        <div className="absolute bottom-4 left-4 bg-marine-dark/80 backdrop-blur-sm p-3 rounded-lg border border-marine-border z-[1000]">
-          <div className="grid grid-cols-2 gap-4 text-sm">
-            <div>
-              <div className="text-marine-text-secondary">Position</div>
-              <div className="text-marine-accent font-mono">{animatedPos.lat.toFixed(6)}°, {animatedPos.lng.toFixed(6)}°</div>
-
+      {/* Command Authority Overlay (New Logic) */}
+      {(missionState?.active || navigationDestination?.set) && (
+        <div className="absolute top-6 left-1/2 -translate-x-1/2 z-[2000] animate-in fade-in duration-500">
+          <div className={`flex items-center gap-4 px-6 py-2.5 rounded-full border backdrop-blur-xl shadow-[0_0_30px_rgba(0,0,0,0.4)] ${
+            missionState?.active ? 'bg-green-500/10 border-green-500/40 text-green-400' : 'bg-marine-accent/10 border-marine-accent/40 text-marine-accent'
+          }`}>
+            <div className={`flex items-center gap-2 font-bold tracking-widest text-[11px] uppercase`}>
+              <div className={`w-2 h-2 rounded-full animate-pulse ${missionState?.active ? 'bg-green-500' : 'bg-marine-accent'}`} />
+              {missionState?.active ? 'Mission Command Active' : 'Navigation Authority Active'}
             </div>
-            <div>
-              <div className="text-marine-text-secondary">Speed</div>
-              <div className="text-marine-accent font-mono">{sensorData.gnss.speed.toFixed(1)} kts</div>
+            <div className="w-px h-4 bg-white/10" />
+            <div className="text-[10px] font-mono text-white/70">
+              {missionState?.active ? `Executing WP ${missionState.currentWaypointIndex + 1}/${missionState.waypoints.length}` : `Transit to: ${navigationDestination.name}`}
             </div>
-            <div>
-              <div className="text-marine-text-secondary">Heading</div>
-              <div className="text-marine-accent font-mono">{sensorData.gnss.heading.toFixed(0)}°</div>
-            </div>
-            <div>
-              <div className="text-marine-text-secondary">Depth</div>
-              <div className="text-marine-accent font-mono">{sensorData.ctd.depth.toFixed(1)} m</div>
-            </div>
+            <Button 
+              size="sm" 
+              variant="ghost" 
+              className="h-6 px-2 text-[10px] hover:bg-white/10 text-white/50"
+              onClick={() => {
+                if (missionState?.active) contextStopMission('mission');
+                else sendCommand({ type: 'CLEAR_NAVIGATION_DESTINATION', vesselId: 'V001' });
+              }}
+            >
+              <X className="w-3 h-3 mr-1" /> Terminate
+            </Button>
           </div>
         </div>
       )}
