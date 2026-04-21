@@ -53,10 +53,10 @@ export function renderMissionPlanningMap({
   avoidanceZones.forEach(zone => {
     if (zone.visible && zone.points.length > 2) {
       ctx.beginPath();
-      const firstPoint = latLngToCanvas(zone.points[0].lat, zone.points[0].lng, width, height);
+      const firstPoint = latLngToCanvas(zone.points[0].lat, zone.points[0].lng);
       ctx.moveTo(firstPoint.x, firstPoint.y);
       zone.points.forEach(point => {
-        const pos = latLngToCanvas(point.lat, point.lng, width, height);
+        const pos = latLngToCanvas(point.lat, point.lng);
         ctx.lineTo(pos.x, pos.y);
       });
       ctx.closePath();
@@ -69,8 +69,8 @@ export function renderMissionPlanningMap({
       ctx.setLineDash([]);
       
       // Warning icon in center
-      const centerX = zone.points.reduce((sum, p) => sum + latLngToCanvas(p.lat, p.lng, width, height).x, 0) / zone.points.length;
-      const centerY = zone.points.reduce((sum, p) => sum + latLngToCanvas(p.lat, p.lng, width, height).y, 0) / zone.points.length;
+      const centerX = zone.points.reduce((sum, p) => sum + latLngToCanvas(p.lat, p.lng).x, 0) / zone.points.length;
+      const centerY = zone.points.reduce((sum, p) => sum + latLngToCanvas(p.lat, p.lng).y, 0) / zone.points.length;
       
       ctx.font = '20px monospace';
       ctx.fillStyle = '#ff3b3b';
@@ -83,10 +83,10 @@ export function renderMissionPlanningMap({
   // Current zone being drawn
   if (isDrawingZone && currentZonePoints.length > 0) {
     ctx.beginPath();
-    const firstPoint = latLngToCanvas(currentZonePoints[0].lat, currentZonePoints[0].lng, width, height);
+    const firstPoint = latLngToCanvas(currentZonePoints[0].lat, currentZonePoints[0].lng);
     ctx.moveTo(firstPoint.x, firstPoint.y);
     currentZonePoints.forEach(point => {
-      const pos = latLngToCanvas(point.lat, point.lng, width, height);
+      const pos = latLngToCanvas(point.lat, point.lng);
       ctx.lineTo(pos.x, pos.y);
     });
     ctx.strokeStyle = '#ff3b3b';
@@ -97,7 +97,7 @@ export function renderMissionPlanningMap({
     
     // Draw points
     currentZonePoints.forEach(point => {
-      const pos = latLngToCanvas(point.lat, point.lng, width, height);
+      const pos = latLngToCanvas(point.lat, point.lng);
       ctx.beginPath();
       ctx.arc(pos.x, pos.y, 5, 0, 2 * Math.PI);
       ctx.fillStyle = '#ff3b3b';
@@ -108,7 +108,7 @@ export function renderMissionPlanningMap({
   // Breadcrumb trail (Mission mode)
   if (isMissionActive && breadcrumbTrail.length > 0) {
     breadcrumbTrail.forEach((point, index) => {
-      const pos = latLngToCanvas(point.lat, point.lng, width, height);
+      const pos = latLngToCanvas(point.lat, point.lng);
       const opacity = index / breadcrumbTrail.length;
       
       ctx.beginPath();
@@ -128,11 +128,11 @@ export function renderMissionPlanningMap({
     ctx.setLineDash(rerouteAnimation.status === 'rerouting' ? [5, 5] : []);
     
     ctx.beginPath();
-    const vesselPosRoute = latLngToCanvas(vesselPosition.lat, vesselPosition.lng, width, height);
+    const vesselPosRoute = latLngToCanvas(vesselPosition.lat, vesselPosition.lng);
     ctx.moveTo(vesselPosRoute.x, vesselPosRoute.y);
     
     waypoints.forEach(wp => {
-      const pos = latLngToCanvas(wp.lat, wp.lng, width, height);
+      const pos = latLngToCanvas(wp.lat, wp.lng);
       ctx.lineTo(pos.x, pos.y);
     });
     ctx.stroke();
@@ -150,11 +150,11 @@ export function renderMissionPlanningMap({
       const firstZone = avoidanceZones[avoidanceZones.length - 1];
       if (firstZone && firstZone.points.length > 0) {
         const zoneCenter = {
-          x: firstZone.points.reduce((sum, p) => sum + latLngToCanvas(p.lat, p.lng, width, height).x, 0) / firstZone.points.length,
-          y: firstZone.points.reduce((sum, p) => sum + latLngToCanvas(p.lat, p.lng, width, height).y, 0) / firstZone.points.length,
+          x: firstZone.points.reduce((sum, p) => sum + latLngToCanvas(p.lat, p.lng).x, 0) / firstZone.points.length,
+          y: firstZone.points.reduce((sum, p) => sum + latLngToCanvas(p.lat, p.lng).y, 0) / firstZone.points.length,
         };
         
-        const firstWp = latLngToCanvas(waypoints[0].lat, waypoints[0].lng, width, height);
+        const firstWp = latLngToCanvas(waypoints[0].lat, waypoints[0].lng);
         
         // Control points for bezier curve
         const cp1x = vesselPosRoute.x + (zoneCenter.x - vesselPosRoute.x) * 0.5 - 50;
@@ -165,7 +165,7 @@ export function renderMissionPlanningMap({
         ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, firstWp.x, firstWp.y);
         
         waypoints.slice(1).forEach(wp => {
-          const pos = latLngToCanvas(wp.lat, wp.lng, width, height);
+          const pos = latLngToCanvas(wp.lat, wp.lng);
           ctx.lineTo(pos.x, pos.y);
         });
       }
@@ -176,12 +176,26 @@ export function renderMissionPlanningMap({
 
   // Waypoints
   waypoints.forEach((wp) => {
-    const pos = latLngToCanvas(wp.lat, wp.lng, width, height);
-    
-    ctx.beginPath();
-    ctx.arc(pos.x, pos.y, 8, 0, 2 * Math.PI);
-    ctx.fillStyle = mapMode === 'tactical' ? '#00ff41' : '#00d4ff';
-    ctx.fill();
+    const pos = latLngToCanvas(wp.lat, wp.lng);
+    const color = mapMode === 'tactical' ? '#00ff41' : '#00d4ff';
+    const isPattern = /^[A-Z]{2}-\d+$/.test(wp.name);
+
+    if (isPattern) {
+      ctx.save();
+      ctx.translate(pos.x, pos.y);
+      ctx.rotate(Math.PI / 4);
+      ctx.beginPath();
+      ctx.rect(-6, -6, 12, 12);
+      ctx.fillStyle = color;
+      ctx.fill();
+      ctx.restore();
+    } else {
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, 8, 0, 2 * Math.PI);
+      ctx.fillStyle = color;
+      ctx.fill();
+    }
+
     ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = 2;
     ctx.stroke();

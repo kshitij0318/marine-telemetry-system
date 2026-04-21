@@ -17,7 +17,7 @@ export function useRingBuffer(value: number | undefined | null, size = 120, inte
     if (value === undefined || value === null || !isFinite(value)) return;
     
     const now = Date.now();
-    const point = { time: now, value: +value.toFixed(3) };
+    const point = { t: now, v: +value.toFixed(3) };
     
     // Efficiently maintain ring buffer
     if (buf.current.length >= size) {

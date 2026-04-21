@@ -1,0 +1,117 @@
+// Using native global fetch available in Node.js 18+ (User is on v24.10.0)
+const turf = require("@turf/turf");
+const coastline = require("./data/coastline-simplified.json");
+
+const ORS_API_KEY = process.env.ORS_API_KEY || "";
+
+async function computeWaterRoute(fromLat, fromLng, toPoints) {
+  if (!ORS_API_KEY) {
+    return fallbackWaterRoute(fromLat, fromLng, toPoints);
+  }
+
+  // Build coordinates array: start + all waypoints [lng, lat]
+  const coords = [
+    [fromLng, fromLat],
+    ...toPoints.map(p => [p.lng, p.lat])
+  ];
+  
+  try {
+    const res = await fetch('https://api.openrouteservice.org/v2/directions/driving-hgv/geojson', {
+      method: 'POST',
+      headers: {
+        'Authorization': ORS_API_KEY,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ coordinates: coords })
+    });
+    
+    if (!res.ok) {
+        console.warn("ORS routing failed, falling back to Turf.js");
+        return fallbackWaterRoute(fromLat, fromLng, toPoints);
+    }
+    
+    const geojson = await res.json();
+    return geojson.features[0].geometry.coordinates.map(
+      ([lng, lat]) => ({ lat, lng })
+    );
+  } catch (err) {
+    console.error("Routing error:", err);
+    return fallbackWaterRoute(fromLat, fromLng, toPoints);
+  }
+}
+
+// Fallback: Turf.js waypoint interpolation avoiding known land polygons
+function fallbackWaterRoute(fromLat, fromLng, toPoints) {
+  const allPoints = [{lat: fromLat, lng: fromLng}, ...toPoints];
+  const route = [];
+  
+  for (let i = 0; i < allPoints.length - 1; i++) {
+    const segment = computeSegmentAroundLand(allPoints[i], allPoints[i+1]);
+    route.push(...segment);
+  }
+  return route.length ? route : allPoints;
+}
+
+function computeSegmentAroundLand(from, to) {
+  if (!coastline || !coastline.features || coastline.features.length === 0) {
+      // Empty coastline => no land
+      return interpolatePoints(from, to, 20);
+  }
+
+  const line = turf.lineString([[from.lng, from.lat], [to.lng, to.lat]]);
+  let intersects = false;
+  
+  // Naive feature intersection since turf.lineIntersect expects two exact features.
+  for (const feature of coastline.features) {
+     const iPoint = turf.lineIntersect(line, feature);
+     if (iPoint.features.length > 0) {
+         intersects = true;
+         break;
+     }
+  }
+
+  if (!intersects) {
+    // No land crossing — straight line is fine
+    return interpolatePoints(from, to, 20); // 20 intermediate points
+  }
+  
+  // Land detected — compute bypass using buffer offset
+  const midLat = (from.lat + to.lat) / 2;
+  const midLng = (from.lng + to.lng) / 2;
+  
+  // Perpendicular offset: rotate bearing 90°, push out 0.1°
+  const bearingDeg = Math.atan2(to.lng - from.lng, to.lat - from.lat) * 180 / Math.PI;
+  const perpBearing = (bearingDeg + 90) % 360;
+  const offsetDist = 0.15; // degrees — enough to clear coast
+  
+  const bypassLat = midLat + offsetDist * Math.cos(perpBearing * Math.PI / 180);
+  const bypassLng = midLng + offsetDist * Math.sin(perpBearing * Math.PI / 180);
+  
+  // Notice: to prevent infinite recursion on complex shapes, this should be bounded 
+  // or return a simpler set. For this simulator baseline, we return the V-shaped bypass.
+  return [
+    ...interpolatePoints(from, {lat: bypassLat, lng: bypassLng}, 10),
+    ...interpolatePoints({lat: bypassLat, lng: bypassLng}, to, 10),
+  ];
+}
+
+function interpolatePoints(from, to, n) {
+  return Array.from({length: n}, (_, i) => ({
+    lat: from.lat + (to.lat - from.lat) * (i / n),
+    lng: from.lng + (to.lng - from.lng) * (i / n),
+  }));
+}
+
+function isPointInWater(lat, lng) {
+  if (!coastline || Math.abs(lat) > 90 || Math.abs(lng) > 180 || coastline.features.length === 0) return true;
+  const point = turf.point([lng, lat]);
+  for (const feature of coastline.features) {
+    if (turf.booleanPointInPolygon(point, feature)) return false;
+  }
+  return true;
+}
+
+module.exports = {
+    computeWaterRoute,
+    isPointInWater
+};

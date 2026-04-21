@@ -12,7 +12,7 @@ module.exports = {
     let voltage = 380.0;
     let runtimeSeconds = 0;
 
-    setInterval(() => {
+    shipState.on('tick', (state) => {
       tickCount++;
       const now = Date.now();
       const t = now / 1000;
@@ -20,7 +20,7 @@ module.exports = {
 
       // 1. Target RPM derived from shipState speed with mechanical inertia
       // If speed is 10kts, target is ~1800 RPM
-      const baseTarget = shipState.speed * 180;
+      const baseTarget = state.speed * 180;
       const cruiseMod = 50 * Math.sin(t / 15); // Engine "burble"
       const targetRPM = Math.max(0, baseTarget + cruiseMod);
       
@@ -71,6 +71,6 @@ module.exports = {
       };
 
       if (tickCount % 10 === 0) client.publish(dataTopic, JSON.stringify(payload));
-    }, 100);
+    });
   }
 };

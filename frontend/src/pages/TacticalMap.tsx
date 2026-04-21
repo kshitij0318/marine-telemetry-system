@@ -10,7 +10,7 @@ export function renderTacticalMap({
   sensorData,
   latLngToCanvas
 }: MapRendererProps) {
-  const vesselPos = latLngToCanvas(vesselPosition.lat, vesselPosition.lng, width, height);
+  const vesselPos = latLngToCanvas(vesselPosition.lat, vesselPosition.lng);
 
   // Threat radius circles
   // Feature 7: Aligned threat colors with RadarDisplay.tsx marine-dark theme

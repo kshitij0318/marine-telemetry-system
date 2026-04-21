@@ -1,0 +1,176 @@
+import React, { useState } from 'react';
+import { Button } from './ui/button';
+import { Card } from './ui/card';
+import { 
+  Grid3X3, RefreshCw, Maximize2, Target, LayoutGrid, 
+  ChevronDown, MapPin, MousePointer2, Settings2 
+} from 'lucide-react';
+import { 
+  generateLawnmower, 
+  generateSpiral, 
+  generateExpandingSquare, 
+  generateRadial, 
+  generateCrosshatch 
+} from '../../utils/surveyPatterns';
+
+interface PatternPresetsPanelProps {
+  vesselPos: { lat: number; lng: number };
+  onApplyPattern: (waypoints: Array<{ lat: number; lng: number; name: string }>) => void;
+  onWaitClick: (patternKey: string) => void;
+}
+
+type PatternType = 'LAWNMOWER' | 'SPIRAL' | 'EXPANDING_SQUARE' | 'RADIAL' | 'CROSSHATCH';
+
+export default function PatternPresetsPanel({ 
+  vesselPos, 
+  onApplyPattern,
+  onWaitClick 
+}: PatternPresetsPanelProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [selectedPattern, setSelectedPattern] = useState<PatternType | null>(null);
+  
+  // Param states
+  const [params, setParams] = useState<any>({
+    LAWNMOWER: { widthM: 500, heightM: 300, spacingM: 50, headingDeg: 0, turnRadiusM: 20 },
+    SPIRAL: { maxRadiusM: 300, spacingM: 40, clockwise: true },
+    EXPANDING_SQUARE: { stepM: 50, maxExtentM: 300 },
+    RADIAL: { maxRadiusM: 300, angleStepDeg: 30 },
+    CROSSHATCH: { widthM: 500, heightM: 300, spacingM: 60, headingDeg: 0, turnRadiusM: 20 }
+  });
+
+  const updateParam = (pattern: PatternType, key: string, value: any) => {
+    setParams((prev: any) => ({
+      ...prev,
+      [pattern]: { ...prev[pattern], [key]: value }
+    }));
+  };
+
+  const handleApply = (center: { lat: number; lng: number }) => {
+    if (!selectedPattern) return;
+    
+    let wps: { lat: number; lng: number }[] = [];
+    const p = params[selectedPattern];
+    let code = '';
+
+    switch (selectedPattern) {
+      case 'LAWNMOWER':
+        wps = generateLawnmower({ center, ...p });
+        code = 'LM';
+        break;
+      case 'SPIRAL':
+        wps = generateSpiral({ center, ...p });
+        code = 'SP';
+        break;
+      case 'EXPANDING_SQUARE':
+        wps = generateExpandingSquare({ center, ...p });
+        code = 'ES';
+        break;
+      case 'RADIAL':
+        wps = generateRadial({ center, ...p });
+        code = 'RD';
+        break;
+      case 'CROSSHATCH':
+        wps = generateCrosshatch({ center, ...p });
+        code = 'CH';
+        break;
+    }
+
+    const namedWps = wps.map((wp, i) => ({
+      ...wp,
+      name: `${code}-${i + 1}`
+    }));
+
+    onApplyPattern(namedWps);
+    setSelectedPattern(null);
+    setIsOpen(false);
+  };
+
+  const patterns = [
+    { id: 'LAWNMOWER', name: 'Lawnmower', icon: Grid3X3 },
+    { id: 'SPIRAL', name: 'Spiral', icon: RefreshCw },
+    { id: 'EXPANDING_SQUARE', name: 'Expanding Square', icon: Maximize2 },
+    { id: 'RADIAL', name: 'Radial', icon: Target },
+    { id: 'CROSSHATCH', name: 'Crosshatch', icon: LayoutGrid },
+  ];
+
+  return (
+    <Card className="bg-marine-dark/90 backdrop-blur-md border-marine-border p-3 shadow-2xl">
+      <div className="flex items-center justify-between mb-2">
+        <h3 className="text-[10px] font-bold text-marine-text uppercase tracking-widest">Survey Patterns</h3>
+        <Button 
+          size="sm" 
+          variant="outline" 
+          onClick={() => setIsOpen(!isOpen)}
+          className="h-7 text-[10px] px-2 font-bold uppercase border-marine-border hover:bg-marine-accent/10"
+        >
+          {isOpen ? 'Close' : 'Choose Pattern'}
+          <ChevronDown className={`w-3 h-3 ml-1 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        </Button>
+      </div>
+
+      {isOpen && (
+        <div className="flex flex-col gap-3 animate-in fade-in slide-in-from-top-2">
+          {!selectedPattern ? (
+            <div className="grid grid-cols-1 gap-1">
+              {patterns.map(p => (
+                <button
+                  key={p.id}
+                  onClick={() => setSelectedPattern(p.id as PatternType)}
+                  className="flex items-center gap-3 p-2 rounded hover:bg-marine-accent/10 text-marine-text text-left transition-colors group"
+                >
+                  <p.icon className="w-4 h-4 text-marine-accent group-hover:scale-110 transition-transform" />
+                  <span className="text-xs font-semibold">{p.name}</span>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 pb-2 border-b border-marine-border">
+                <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setSelectedPattern(null)}>
+                  <ChevronDown className="rotate-90 w-4 h-4" />
+                </Button>
+                <span className="text-xs font-bold text-marine-accent uppercase italic">
+                  {patterns.find(p => p.id === selectedPattern)?.name}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                {Object.entries(params[selectedPattern]).map(([key, val]) => (
+                  <div key={key} className="flex flex-col gap-1">
+                    <label className="text-[9px] uppercase text-marine-text-secondary font-mono">
+                      {key.replace('M', ' (m)').replace('Deg', ' (°)')}
+                    </label>
+                    <input
+                      type="number"
+                      value={val as any}
+                      onChange={(e) => updateParam(selectedPattern, key, parseFloat(e.target.value))}
+                      className="bg-marine-surface border border-marine-border rounded px-2 py-1 text-[11px] text-marine-text focus:border-marine-accent outline-none"
+                    />
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <Button 
+                  size="sm" 
+                  className="flex-1 text-[10px] bg-marine-accent/20 hover:bg-marine-accent/30 text-marine-accent border border-marine-accent/30 h-8"
+                  onClick={() => handleApply(vesselPos)}
+                >
+                  <MapPin className="w-3 h-3 mr-1.5" /> At Vessel
+                </Button>
+                <Button 
+                  size="sm" 
+                  variant="outline"
+                  className="flex-1 text-[10px] h-8 border-marine-border"
+                  onClick={() => onWaitClick(selectedPattern)}
+                >
+                  <MousePointer2 className="w-3 h-3 mr-1.5" /> Select Point
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </Card>
+  );
+}

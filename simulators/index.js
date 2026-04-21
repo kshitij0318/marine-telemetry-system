@@ -13,23 +13,68 @@ const vesselId = process.env.VESSEL_ID || "V001";
 const START_LAT = parseFloat(process.env.VESSEL_START_LAT || "18.9000");
 const START_LNG = parseFloat(process.env.VESSEL_START_LNG || "72.6500");
 
-// The globally shared simulation physics pool
-const shipState = {
-  lat:     START_LAT,
-  lng:     START_LNG,
-  heading: 270, // West — into open Arabian Sea water by default
-  speed:   0,
-  depth:   20,
-  roll:    0,
-  pitch:   0,
-};
-
+const shipState = require("./shipState");
+const waterRouter = require("./waterRouter");
+const pathSplitter = require("./pathSplitter");
 
 const client = mqtt.connect("mqtt://localhost:1883");
 
 client.on("connect", () => {
   console.log(`Physics Engine Connected. Launching coherent simulations for ${vesselId}`);
-  
+
+  // The master physics tick
+  setInterval(() => {
+    shipState.masterTick(null, null); // We will inject waterRouter and pathSplitter in later phases
+  }, 100);
+
+  // Core Command Handlers
+  client.subscribe("COMMANDS/MISSION");
+  client.subscribe("COMMANDS/NAVIGATION");
+
+  client.on("message", async (topic, message) => {
+    try {
+      const cmd = JSON.parse(message.toString());
+      if (topic === "COMMANDS/MISSION") {
+        if (cmd.type === "START_MISSION") {
+          shipState.missionOwner = cmd.ownerPage || "mission";
+          shipState.waypoints = cmd.waypoints || [];
+          shipState.avoidanceZones = cmd.avoidanceZones || [];
+          shipState.currentWaypointIndex = 0;
+          shipState.missionActive = true;
+          
+          // Phase 2 & 4: Water-Only Routing Engine + Path Splitter
+          // Wait for async routing before applying dynamically computed route Points
+          let rawRoute = await waterRouter.computeWaterRoute(shipState.lat, shipState.lng, shipState.waypoints);
+          
+          // Apply avoidance zone dynamic path splitting
+          shipState.routePoints = pathSplitter.computeReroutedPath(rawRoute, shipState.avoidanceZones);
+          
+        } else if (cmd.type === "STOP_MISSION") {
+          shipState.missionActive = false;
+        }
+      } else if (topic === "COMMANDS/NAVIGATION") {
+        if (cmd.type === "SET_NAVIGATION_DESTINATION") {
+          shipState.missionActive = true; // Use steering engine
+          shipState.missionOwner = "navigation";
+          shipState.waypoints = [{ lat: cmd.payload.lat, lng: cmd.payload.lng }];
+          shipState.avoidanceZones = []; // Nav mode usually doesn't have custom zones set via the UI immediately
+          shipState.currentWaypointIndex = 0;
+
+          // Compute water-only route
+          let rawRoute = await waterRouter.computeWaterRoute(shipState.lat, shipState.lng, shipState.waypoints);
+          shipState.routePoints = rawRoute;
+          
+        } else if (cmd.type === "CLEAR_NAVIGATION_DESTINATION") {
+          if (shipState.missionOwner === "navigation") {
+            shipState.missionActive = false;
+          }
+        }
+      }
+    } catch (e) {
+      console.error("Simulation command parse error:", e);
+    }
+  });
+
   // Initialize and attach standard simulators to the shared memory bus
   GNSSSimulator.start(client, vesselId, shipState);
   CTDSimulator.start(client, vesselId, shipState);

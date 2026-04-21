@@ -115,7 +115,7 @@ export default function GNSSDashboard() {
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1a2d47" />
-                <XAxis dataKey="time" stroke="#8ba7be" fontSize={12} tickFormatter={(t) => new Date(t).toLocaleTimeString()} />
+                <XAxis dataKey="t" stroke="#8ba7be" fontSize={12} tickFormatter={(t) => new Date(t).toLocaleTimeString()} />
                 <YAxis stroke="#8ba7be" fontSize={12} />
                 <Tooltip
                   contentStyle={{
@@ -126,7 +126,7 @@ export default function GNSSDashboard() {
                   }}
                   labelFormatter={(t) => new Date(t).toLocaleTimeString()}
                 />
-                <Area type="monotone" dataKey="value" stroke="#00d9ff" fillOpacity={1} fill="url(#speedGradient)" />
+                <Area type="monotone" dataKey="v" stroke="#00d9ff" fillOpacity={1} fill="url(#speedGradient)" />
               </AreaChart>
             </ResponsiveContainer>
           </Card>
@@ -136,7 +136,7 @@ export default function GNSSDashboard() {
             <ResponsiveContainer width="100%" height={200}>
               <LineChart data={headingHistory}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1a2d47" />
-                <XAxis dataKey="time" stroke="#8ba7be" fontSize={12} tickFormatter={(t) => new Date(t).toLocaleTimeString()} />
+                <XAxis dataKey="t" stroke="#8ba7be" fontSize={12} tickFormatter={(t) => new Date(t).toLocaleTimeString()} />
                 <YAxis stroke="#8ba7be" fontSize={12} domain={[0, 360]} />
                 <Tooltip
                   contentStyle={{
@@ -147,7 +147,7 @@ export default function GNSSDashboard() {
                   }}
                   labelFormatter={(t) => new Date(t).toLocaleTimeString()}
                 />
-                <Line type="monotone" dataKey="value" stroke="#00a8cc" strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="v" stroke="#00a8cc" strokeWidth={2} dot={false} />
               </LineChart>
             </ResponsiveContainer>
           </Card>
@@ -163,7 +163,7 @@ export default function GNSSDashboard() {
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1a2d47" />
-                <XAxis dataKey="time" stroke="#8ba7be" fontSize={12} tickFormatter={(t) => new Date(t).toLocaleTimeString()} />
+                <XAxis dataKey="t" stroke="#8ba7be" fontSize={12} tickFormatter={(t) => new Date(t).toLocaleTimeString()} />
                 <YAxis stroke="#8ba7be" fontSize={12} domain={[0, 15]} />
                 <Tooltip
                   contentStyle={{
@@ -174,7 +174,7 @@ export default function GNSSDashboard() {
                   }}
                   labelFormatter={(t) => new Date(t).toLocaleTimeString()}
                 />
-                <Area type="step" dataKey="value" stroke="#4ade80" fillOpacity={1} fill="url(#satGradient)" />
+                <Area type="step" dataKey="v" stroke="#4ade80" fillOpacity={1} fill="url(#satGradient)" />
               </AreaChart>
             </ResponsiveContainer>
           </Card>

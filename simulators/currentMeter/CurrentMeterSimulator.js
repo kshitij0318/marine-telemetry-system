@@ -11,7 +11,7 @@ module.exports = {
     let baseDirection = 45; // NE current
     let baseTemp = 21.5;
 
-    setInterval(() => {
+    shipState.on('tick', (state) => {
       tickCount++;
       const now = Date.now();
       const t = now / 1000;
@@ -36,11 +36,11 @@ module.exports = {
       const upward = +(0.05 * Math.sin(t / 300)).toFixed(3);
 
       // 3. Environmental Persistence
-      const targetTemp = 21.5 + 0.5 * Math.sin(t / 4000) - (shipState.depth / 150);
+      const targetTemp = 21.5 + 0.5 * Math.sin(t / 4000) - (state.depth / 150);
       const waterTemp = baseTemp + (targetTemp - baseTemp) * 0.01 + (Math.random() - 0.5) * 0.005;
       baseTemp = waterTemp;
 
-      const salinity = 34.2 + 0.1 * Math.sin(t / 5000) + (shipState.depth / 300);
+      const salinity = 34.2 + 0.1 * Math.sin(t / 5000) + (state.depth / 300);
       const turbidity = 1.8 + 0.5 * Math.cos(t / 2000);
 
       const payload = {
@@ -55,6 +55,6 @@ module.exports = {
       };
 
       if (tickCount % 10 === 0) client.publish(dataTopic, JSON.stringify(payload));
-    }, 100); // 10Hz internal, 1Hz publish
+    }); // 10Hz internal, 1Hz publish
   }
 };

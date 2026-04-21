@@ -56,21 +56,21 @@ module.exports = {
     let cumulativeDetectionCount = 0;
     let lastSpawnTime = 0;
 
-    function spawnObstacles() {
+    function spawnObstacles(state) {
       const now = Date.now();
       const count = 2 + Math.floor(Math.random() * 3);
       const newObs = [];
       for (let i = 0; i < count && activeObstacles.length + newObs.length < MAX_OBSTACLES; i++) {
-        const bearing = (shipState.heading + (Math.random() * 2 - 1) * SPAWN_HALF_ARC + 360) % 360;
+        const bearing = (state.heading + (Math.random() * 2 - 1) * SPAWN_HALF_ARC + 360) % 360;
         const distance = MIN_SPAWN_DIST + Math.random() * (config.operatingRange - MIN_SPAWN_DIST - 20);
-        const pos = destPoint(shipState.lat, shipState.lng, bearing, distance);
+        const pos = destPoint(state.lat, state.lng, bearing, distance);
         newObs.push({ id: `OBS-${++obstacleCounter}`, lat: pos.lat, lng: pos.lng, spawnedAt: now, driftDir: Math.random() * 360 });
       }
       activeObstacles = [...activeObstacles, ...newObs];
       lastSpawnTime = now;
     }
 
-    setInterval(() => {
+    shipState.on('tick', (state) => {
       const now = Date.now();
       tickCount++;
 
@@ -83,23 +83,15 @@ module.exports = {
         o.lat = p.lat; o.lng = p.lng;
       });
 
-      if (now - lastSpawnTime >= SPAWN_INTERVAL_MS || activeObstacles.length === 0) spawnObstacles();
+      if (now - lastSpawnTime >= SPAWN_INTERVAL_MS || activeObstacles.length === 0) spawnObstacles(state);
 
       // 2. Detections
       const detections = [];
       for (const obs of activeObstacles) {
-        const distance = calculateDistance(shipState.lat, shipState.lng, obs.lat, obs.lng);
+        const distance = calculateDistance(state.lat, state.lng, obs.lat, obs.lng);
         if (distance > config.operatingRange) continue;
-        const absoluteBearing = calculateBearing(shipState.lat, shipState.lng, obs.lat, obs.lng);
-        let relAngle = ((absoluteBearing - shipState.heading + 360) % 360);
-        // Correct for Sonar display: dead ahead is 90 in canvas logic usually,
-        // but frontend SonarDisplay does (det.angle - 90).
-        // If dead ahead is 0 deg from backend: (0 - 90) = -90 rad?
-        // Wait, SonarDisplay uses:
-        // const angle = (det.angle - 90) * Math.PI / 180;
-        // If det.angle is 90, result is 0 rad (straight right).
-        // If det.angle is 0, result is -90 deg (straight up).
-        // So dead ahead should be 0 from backend.
+        const absoluteBearing = calculateBearing(state.lat, state.lng, obs.lat, obs.lng);
+        let relAngle = ((absoluteBearing - state.heading + 360) % 360);
 
         detections.push({ id: obs.id, angle: +relAngle.toFixed(1), distance: +distance.toFixed(1), threat: distance < 60 ? "high" : distance < 130 ? "medium" : "low" });
       }
@@ -125,6 +117,6 @@ module.exports = {
       };
 
       if (tickCount % 5 === 0) client.publish(dataTopic, JSON.stringify(payload));
-    }, 200);
+    });
   }
 };

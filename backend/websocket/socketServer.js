@@ -1,7 +1,9 @@
 const WebSocket = require("ws");
 const aggregationService = require("../services/aggregationService");
+const { checkAndEmitAlerts } = require("../services/notificationEngine");
 
 let wss;
+let latestAlerts = []; // Rolling cache of last emitted alerts
 
 // ── Global state (backend is single source of truth) ─────────────────────────
 const missions = {}; // { vesselId: MissionState }
@@ -134,6 +136,19 @@ function init(server) {
 
     ws.on("close", () => console.log("WebSocket client disconnected"));
   });
+
+  // ── Notification engine 1Hz loop ──────────────────────────────────────────
+  setInterval(() => {
+    const vesselId = 'V001';
+    const state = aggregationService.getAggregatedState(vesselId);
+    const mission = missions[vesselId] || null;
+    const newAlerts = checkAndEmitAlerts(state, mission);
+    if (newAlerts.length > 0) {
+      // Merge into rolling cache, cap at 100
+      latestAlerts = [...newAlerts, ...latestAlerts].slice(0, 100);
+      broadcastParentUpdate(vesselId);
+    }
+  }, 1000);
 }
 
 // ── Broadcast telemetry update to all clients ─────────────────────────────────
@@ -168,6 +183,7 @@ function broadcastParentUpdate(vesselId) {
     data: state,
     missionState,
     navigationDestination,
+    alerts: latestAlerts.slice(0, 20), // send latest 20 alerts
   });
 
   wss.clients.forEach((client) => {

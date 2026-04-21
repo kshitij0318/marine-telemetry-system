@@ -73,6 +73,7 @@ interface TelemetryContextType {
   sensorData: SensorData;
   missionState: any | null;
   navigationDestination: any | null;
+  alerts: any[];
   isConnected: boolean;
   sendCommand: (cmd: any) => void;
 }
@@ -146,6 +147,7 @@ export function useLiveTelemetry() {
   const [sensorData, setSensorData] = useState<SensorData>(DEFAULT_SENSOR_DATA);
   const [missionState, setMissionState] = useState<any | null>(null);
   const [navigationDestination, setNavigationDestination] = useState<any | null>(null);
+  const [alerts, setAlerts] = useState<any[]>([]);
   const lastUIUpdate = React.useRef<number>(0);
   const [isConnected, setIsConnected] = useState(false);
   const wsRef = React.useRef<WebSocket | null>(null);
@@ -262,6 +264,9 @@ export function useLiveTelemetry() {
               setSensorData({ ...sensorDataRef.current });
               setMissionState(payload.missionState || null);
               setNavigationDestination(payload.navigationDestination || null);
+              if (payload.alerts?.length > 0) {
+                setAlerts(prev => [...payload.alerts, ...prev].slice(0, 100));
+              }
             }
           }
         } catch (err) {
@@ -296,14 +301,14 @@ export function useLiveTelemetry() {
     };
   }, []);
 
-  return { sensorData, missionState, navigationDestination, isConnected, sendCommand };
+  return { sensorData, missionState, navigationDestination, alerts, isConnected, sendCommand };
 }
 
 export function TelemetryProvider({ children }: { children: React.ReactNode }) {
   const liveTelemetry = useLiveTelemetry();
 
   return (
-    <TelemetryContext.Provider value={{ sensorData: liveTelemetry.sensorData, missionState: liveTelemetry.missionState, navigationDestination: liveTelemetry.navigationDestination, isConnected: liveTelemetry.isConnected, sendCommand: liveTelemetry.sendCommand }}>
+    <TelemetryContext.Provider value={{ sensorData: liveTelemetry.sensorData, missionState: liveTelemetry.missionState, navigationDestination: liveTelemetry.navigationDestination, alerts: liveTelemetry.alerts, isConnected: liveTelemetry.isConnected, sendCommand: liveTelemetry.sendCommand }}>
       {children}
     </TelemetryContext.Provider>
   );

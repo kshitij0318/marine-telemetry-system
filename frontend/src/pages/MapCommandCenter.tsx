@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useTelemetry } from '../contexts/TelemetryContext';
 import { useMission } from '../contexts/MissionContext';
 import { Card } from '../app/components/ui/card';
@@ -6,7 +6,8 @@ import { Button } from '../app/components/ui/button';
 import { 
   Play, Square, MapPin, Navigation, Navigation2, 
   Settings, Layers, Trash2, AlertTriangle, Eye, EyeOff, Info,
-  Search, Crosshair, ChevronRight, Activity, Zap, X
+  Search, Crosshair, ChevronRight, Activity, Zap, X,
+  FileDown, Upload
 } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap, Polygon, Circle, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
@@ -15,6 +16,12 @@ import { NavigationDestinationPanel } from '../app/components/NavigationDestinat
 import { computeReroutedPath, calculateDistance } from '../utils/routeUtils';
 import { isOnWater } from '../utils/waterCheck';
 import { useAnimatedVesselPosition } from '../hooks/useAnimatedVesselPosition';
+import { VesselMarker } from '../app/components/map/VesselMarker';
+import PatternPresetsPanel from '../app/components/PatternPresetsPanel';
+import WaypointActionEditor from '../app/components/WaypointActionEditor';
+import { WaypointActionConfig } from '../types/waypointActions';
+import { generateLawnmower, generateSpiral, generateExpandingSquare, generateRadial, generateCrosshatch } from '../utils/surveyPatterns';
+import { exportMissionToCSV, importMissionFromCSV } from '../utils/missionCSV';
 
 // ── Types ──────────────────────────────────────────────────────────────
 interface Waypoint {
@@ -22,6 +29,7 @@ interface Waypoint {
   lat: number;
   lng: number;
   name: string;
+  actions?: WaypointActionConfig;
 }
 
 interface AvoidanceZone {
@@ -77,34 +85,103 @@ export default function MapCommandCenter() {
   const [isDrawingZone, setIsDrawingZone] = useState(false);
   const [currentZonePoints, setCurrentZonePoints] = useState<Array<{ lat: number; lng: number }>>([]);
   const [followVessel, setFollowVessel] = useState(false);
+  const [activePatternRequest, setActivePatternRequest] = useState<{key: string, params: any} | null>(null);
   
   const [rerouteAnimation, setRerouteAnimation] = useState<RerouteAnimation>({
     active: false, status: 'complete', deltaDistance: 0, modifiedWaypoints: 0,
   });
+
+  const updateWaypointPosition = (id: string, newLat: number, newLng: number) => {
+    setOriginalWaypoints(prev => prev.map(wp => 
+      wp.id === id ? { ...wp, lat: newLat, lng: newLng } : wp
+    ));
+  };
+
+  const planningMetrics = useMemo(() => {
+    const wps = reroutedWaypoints.length > 0 ? reroutedWaypoints : originalWaypoints;
+    if (wps.length < 1) return { distance: 0, eta: 0 };
+    
+    // If only 1 WP, distance is from vessel
+    if (wps.length === 1) {
+      const d = calculateDistance(animatedPos.lat, animatedPos.lng, wps[0].lat, wps[0].lng);
+      const speedKnots = sensorData.gnss.speed || 5;
+      const speedMs = speedKnots * 0.51444;
+      return { distance: d, eta: speedMs > 0 ? d / speedMs : 0 };
+    }
+
+    let totalD = 0;
+    // From vessel to first wp
+    totalD += calculateDistance(animatedPos.lat, animatedPos.lng, wps[0].lat, wps[0].lng);
+    // Between wps
+    for (let i = 0; i < wps.length - 1; i++) {
+       totalD += calculateDistance(wps[i].lat, wps[i].lng, wps[i+1].lat, wps[i+1].lng);
+    }
+    
+    let totalActionTime = 0;
+    wps.forEach(wp => {
+      if (wp.actions) {
+        if (wp.actions.addons.includes('WAIT')) totalActionTime += (wp.actions.params.waitDuration || 0);
+        if (wp.actions.addons.includes('SURVEY')) totalActionTime += (wp.actions.params.surveyDuration || 0);
+        if (wp.actions.movement === 'LOITER') {
+          const circ = 2 * Math.PI * (wp.actions.params.loiterRadius || 50);
+          const speedKnotsInner = sensorData.gnss.speed || 5;
+          const speedMsInner = speedKnotsInner * 0.51444;
+          totalActionTime += speedMsInner > 0 ? circ / speedMsInner : 0;
+        }
+      }
+    });
+
+    const speedKnots = sensorData.gnss.speed || 5; 
+    const speedMs = speedKnots * 0.51444;
+    const transitTime = speedMs > 0 ? totalD / speedMs : 0;
+    
+    return { distance: totalD, eta: transitTime + totalActionTime };
+  }, [originalWaypoints, reroutedWaypoints, sensorData.gnss.speed, animatedPos.lat, animatedPos.lng]);
+
+  const updateWaypointActions = (id: string, actions: WaypointActionConfig) => {
+    setOriginalWaypoints(prev => prev.map(wp => wp.id === id ? { ...wp, actions } : wp));
+  };
+
+  const [editingWaypointId, setEditingWaypointId] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const resetMission = () => {
+    setOriginalWaypoints([]);
+    setReroutedWaypoints([]);
+    setAvoidanceZones([]);
+    setLandError('');
+    setActivePatternRequest(null);
+    setEditingWaypointId(null);
+  };
+
+  const handleSaveMission = () => {
+    const csv = exportMissionToCSV(originalWaypoints, avoidanceZones);
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `mission_${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
   
   const [checkingWater, setCheckingWater] = useState(false);
   const [landError, setLandError] = useState('');
 
-  // ── Dynamic Icons ─────────────────────────────────────────────────────
-  // We re-create the vessel icon to apply rotation directly to the arrow
-  const vesselIcon = useMemo(() => L.divIcon({
-    className: 'custom-vessel-icon',
-    html: `<div class="vessel-marker">
-            <div class="vessel-arrow" style="transform: rotate(${animatedPos.heading}deg)"></div>
-           </div>`,
-    iconSize: [30, 30],
-    iconAnchor: [15, 15],
-  }), [animatedPos.heading]);
+  // ── Dynamic Icons (waypoints only — vessel uses imperative VesselMarker) ──
 
-  const waypointIcon = (name: string, active: boolean) => L.divIcon({
-    className: 'custom-waypoint-icon',
-    html: `<div class="wp-marker ${active ? 'animate-pulse scale-110' : 'opacity-80'}">
-            <div class="wp-dot"></div>
-            <div class="wp-label">${name}</div>
-          </div>`,
-    iconSize: [20, 20],
-    iconAnchor: [10, 10],
-  });
+  const waypointIcon = (name: string, active: boolean) => {
+    const isPattern = /^[A-Z]{2}-\d+$/.test(name);
+    return L.divIcon({
+      className: 'custom-waypoint-icon',
+      html: `<div class="wp-marker ${active ? 'animate-pulse scale-110' : 'opacity-80'}">
+              <div class="wp-dot ${isPattern ? 'wp-diamond' : ''}"></div>
+              <div class="wp-label">${name}</div>
+            </div>`,
+      iconSize: [20, 20],
+      iconAnchor: [10, 10],
+    });
+  };
 
   // Rerouting logic (Frontend specific to planning phase)
   useEffect(() => {
@@ -176,6 +253,28 @@ export default function MapCommandCenter() {
       } catch { /* fail open */ } finally { setCheckingWater(false); }
     }
 
+    if (activePatternRequest) {
+      const { key, params } = activePatternRequest;
+      let wps: { lat: number; lng: number }[] = [];
+      let code = '';
+      const center = { lat: latlng.lat, lng: latlng.lng };
+
+      if (key === 'LAWNMOWER') { wps = generateLawnmower({ center, ...params }); code = 'LM'; }
+      else if (key === 'SPIRAL') { wps = generateSpiral({ center, ...params }); code = 'SP'; }
+      else if (key === 'EXPANDING_SQUARE') { wps = generateExpandingSquare({ center, ...params }); code = 'ES'; }
+      else if (key === 'RADIAL') { wps = generateRadial({ center, ...params }); code = 'RD'; }
+      else if (key === 'CROSSHATCH') { wps = generateCrosshatch({ center, ...params }); code = 'CH'; }
+
+      const newWPs = wps.map((wp, i) => ({
+        ...wp,
+        id: `wp-${Date.now()}-${i}`,
+        name: `${code}-${i + 1}`
+      }));
+      setOriginalWaypoints([...originalWaypoints, ...newWPs]);
+      setActivePatternRequest(null);
+      return;
+    }
+
     if (isDrawingZone) {
       setCurrentZonePoints([...currentZonePoints, { lat: latlng.lat, lng: latlng.lng }]);
     } else if (mapMode === 'mission' && !missionState?.active && !navigationDestination?.set) {
@@ -210,11 +309,12 @@ export default function MapCommandCenter() {
   };
 
   const getETA = () => {
-    if (!missionState?.eta || missionState.eta === Infinity) return 'N/A';
-    return new Date(Date.now() + missionState.eta * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const eta = missionState?.active ? missionState?.eta : planningMetrics.eta;
+    if (!eta || eta === Infinity) return 'N/A';
+    return new Date(Date.now() + (eta * 1000)).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
   const getDuration = () => {
-    const s = missionState?.eta;
+    const s = missionState?.active ? missionState?.eta : planningMetrics.eta;
     if (!s || s === Infinity) return 'N/A';
     const h = Math.floor(s/3600), m = Math.floor((s%3600)/60);
     return h > 0 ? `${h}h ${m}m` : `${m}m`;
@@ -233,8 +333,8 @@ export default function MapCommandCenter() {
           <ChangeView center={[animatedPos.lat, animatedPos.lng]} zoom={14} follow={followVessel} />
           <MapEvents onClick={handleMapClick} onDblClick={handleMapDblClick} />
 
-          {/* Vessel */}
-          <Marker position={[animatedPos.lat, animatedPos.lng]} icon={vesselIcon} />
+          {/* Vessel — imperative Leaflet updates bypass React, zero re-renders at 10FPS */}
+          <VesselMarker />
 
           {/* Navigation Destination Line & Marker */}
           {navigationDestination?.set && (
@@ -260,7 +360,22 @@ export default function MapCommandCenter() {
             pathOptions={{ color: missionState?.active ? '#00ff9d' : '#00a8cc', weight: 3, lineJoin: 'round', opacity: 0.8 }} 
           />
           {activeWaypoints.map((wp, i) => (
-            <Marker key={wp.id} position={[wp.lat, wp.lng]} icon={waypointIcon(wp.name, i === missionState?.currentWaypointIndex)} />
+            <Marker 
+              key={wp.id} 
+              position={[wp.lat, wp.lng]} 
+              draggable={!missionState?.active}
+              eventHandlers={{
+                drag: (e) => {
+                  const { lat, lng } = e.target.getLatLng();
+                  updateWaypointPosition(wp.id, lat, lng);
+                },
+                dragend: (e) => {
+                  const { lat, lng } = e.target.getLatLng();
+                  updateWaypointPosition(wp.id, lat, lng);
+                }
+              }}
+              icon={waypointIcon(wp.name, i === missionState?.currentWaypointIndex)} 
+            />
           ))}
 
           {/* Avoidance Zones */}
@@ -303,19 +418,79 @@ export default function MapCommandCenter() {
                 </div>
               </div>
 
-              <div className="flex gap-2">
+              <div className="space-y-2 mb-4">
                 {!missionState?.active ? (
-                  <Button onClick={startMission} className="flex-1 bg-marine-accent hover:bg-marine-accent/80 text-white font-bold h-9" disabled={originalWaypoints.length < 2}>
-                    <Play className="w-4 h-4 mr-2" /> Start Mission
+                  <Button 
+                    className="w-full bg-marine-accent hover:bg-marine-accent/80 text-marine-dark font-bold py-6 text-base tracking-widest uppercase shadow-lg shadow-marine-accent/20 transition-all active:scale-[0.98]"
+                    disabled={originalWaypoints.length === 0}
+                    onClick={() => contextStartMission({
+                      type: 'mission_planning',
+                      ownerPage: 'mission',
+                      waypoints: reroutedWaypoints.length > 0 ? reroutedWaypoints : originalWaypoints,
+                      avoidanceZones,
+                      reroutedWaypoints,
+                      active: true,
+                      estimatedDistance: planningMetrics.distance,
+                      estimatedDuration: planningMetrics.eta,
+                    })}
+                  >
+                    <Navigation className="w-5 h-5 mr-2" /> Execute Mission
                   </Button>
                 ) : (
-                  <Button onClick={() => contextStopMission('mission')} variant="destructive" className="flex-1 font-bold h-9">
-                    <Square className="w-4 h-4 mr-2" /> Stop Mission
+                  <Button 
+                    variant="destructive"
+                    className="w-full font-bold py-6 text-base tracking-widest uppercase shadow-lg"
+                    onClick={() => contextStopMission('mission')}
+                  >
+                    <Square className="w-5 h-5 mr-2" /> Stop Mission
                   </Button>
                 )}
-                <Button size="icon" variant="outline" onClick={() => { setOriginalWaypoints([]); setReroutedWaypoints([]); setAvoidanceZones([]); }} className="w-9 h-9 border-marine-border">
-                  <Trash2 className="w-4 h-4" />
-                </Button>
+
+                <div className="flex gap-2">
+                  <Button 
+                    variant="outline" 
+                    className="flex-1 text-[10px] font-bold uppercase border-marine-border hover:bg-marine-accent/10 h-10"
+                    onClick={resetMission}
+                    disabled={missionState?.active}
+                  >
+                    <Trash2 className="w-3.5 h-3.5 mr-1.5" /> Clear
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    className="flex-1 text-[10px] font-bold uppercase border-marine-border hover:bg-marine-accent/10 h-10"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={missionState?.active}
+                  >
+                    <Upload className="w-3.5 h-3.5 mr-1.5" /> Load CSV
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    className="flex-1 text-[10px] font-bold uppercase border-marine-border hover:bg-marine-accent/10 h-10"
+                    onClick={handleSaveMission}
+                    disabled={originalWaypoints.length === 0}
+                  >
+                    <FileDown className="w-3.5 h-3.5 mr-1.5" /> Save
+                  </Button>
+                </div>
+                <input 
+                  type="file" 
+                  ref={fileInputRef} 
+                  className="hidden" 
+                  accept=".csv"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      const reader = new FileReader();
+                      reader.onload = (entry) => {
+                        const text = entry.target?.result as string;
+                        const { waypoints, zones } = importMissionFromCSV(text);
+                        setOriginalWaypoints(waypoints as any);
+                        setAvoidanceZones(zones);
+                      };
+                      reader.readAsText(file);
+                    }
+                  }}
+                />
               </div>
 
               {landError && (
@@ -328,7 +503,10 @@ export default function MapCommandCenter() {
               {/* Waypoint List with Scrolling */}
               <div className="flex flex-col gap-2 overflow-y-auto pr-1 custom-scrollbar min-h-0 flex-1">
                 {activeWaypoints.map((wp, i) => (
-                  <div key={wp.id} className={`group p-2.5 rounded border transition-all ${
+                  <div 
+                    key={wp.id} 
+                    onClick={() => setEditingWaypointId(wp.id)}
+                    className={`group p-2.5 rounded border transition-all cursor-pointer hover:shadow-md ${
                     i === missionState?.currentWaypointIndex ? 'bg-marine-accent/10 border-marine-accent' : 
                     missionState?.completedWaypoints.includes(wp.id) ? 'bg-green-500/5 border-green-500/20 opacity-60' :
                     'bg-marine-surface border-marine-border hover:border-marine-text-secondary'
@@ -341,7 +519,7 @@ export default function MapCommandCenter() {
                         <span className="text-xs font-semibold text-marine-text">{wp.name}</span>
                       </div>
                       {!missionState?.active && (
-                        <button onClick={() => removeWaypoint(wp.id)} className="opacity-0 group-hover:opacity-100 transition-opacity p-1 text-red-400 hover:bg-red-500/10 rounded">
+                        <button onClick={(e) => { e.stopPropagation(); removeWaypoint(wp.id); }} className="opacity-0 group-hover:opacity-100 transition-opacity p-1 text-red-400 hover:bg-red-500/10 rounded">
                           <X size={12} />
                         </button>
                       )}
@@ -350,6 +528,21 @@ export default function MapCommandCenter() {
                       <span>{wp.lat.toFixed(5)}°N</span>
                       <span>{wp.lng.toFixed(5)}°E</span>
                     </div>
+
+                    {wp.actions?.addons && wp.actions.addons.length > 0 && (
+                      <div className="flex gap-1 mt-2 flex-wrap">
+                        {wp.actions.addons.map(a => (
+                          <span key={a} className="text-[9px] px-1.5 py-0.5 bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded font-mono">
+                            {a.replace('SONAR_SCAN', 'SONAR').replace('CHANGE_', '')}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {wp.actions?.movement && wp.actions.movement !== 'TRANSIT' && (
+                       <span className="inline-block mt-1 text-[9px] px-1.5 py-0.5 bg-marine-accent/20 text-marine-accent border border-marine-accent/30 rounded font-mono uppercase">
+                         {wp.actions.movement}
+                       </span>
+                    )}
                   </div>
                 ))}
                 
@@ -363,7 +556,11 @@ export default function MapCommandCenter() {
 
               {/* Shared Live Stats */}
               <div className="grid grid-cols-2 gap-3 pt-3 border-t border-marine-border">
-                <StatRow label="Remaining" value={`${((missionState?.distanceRemaining || 0)/1000).toFixed(2)} km`} color="text-marine-accent" />
+                <StatRow 
+                  label={missionState?.active ? "Remaining" : "Total Distance"} 
+                  value={`${((missionState?.active ? missionState.distanceRemaining : planningMetrics.distance)/1000).toFixed(2)} km`} 
+                  color="text-marine-accent" 
+                />
                 <StatRow label="ETA" value={getETA()} color="text-marine-accent" />
                 <StatRow label="Duration" value={getDuration()} />
                 <StatRow label="Status" value={missionState?.active ? 'En Route' : 'Standing By'} />
@@ -390,15 +587,24 @@ export default function MapCommandCenter() {
 
                <div className="flex flex-wrap gap-1.5">
                  {avoidanceZones.map((zone, idx) => (
-                   <div key={zone.id} className="flex items-center gap-1 bg-red-500/10 border border-red-500/30 px-2 py-0.5 rounded-full">
-                     <span className="text-[9px] font-bold text-red-100">Z-{idx+1}</span>
-                     <button onClick={() => setAvoidanceZones(p => p.filter(z => z.id !== zone.id))} className="text-red-400 hover:text-red-200">
-                       <Trash2 size={10} />
-                     </button>
-                   </div>
-                 ))}
+                    <div key={zone.id} className="flex items-center gap-1 bg-red-500/10 border border-red-500/30 px-2 py-0.5 rounded-full">
+                      <span className="text-[9px] font-bold text-red-100">Z-{idx+1}</span>
+                      <button onClick={() => setAvoidanceZones(p => p.filter(z => z.id !== zone.id))} className="text-red-400 hover:text-red-200">
+                        <Trash2 size={10} />
+                      </button>
+                    </div>
+                  ))}
                </div>
             </Card>
+
+            <PatternPresetsPanel 
+               vesselPos={animatedPos}
+               onApplyPattern={(newWps) => {
+                 const mapped = newWps.map((wp, i) => ({ ...wp, id: `wp-${Date.now()}-${i}` }));
+                 setOriginalWaypoints([...originalWaypoints, ...mapped]);
+               }}
+               onWaitClick={(key, params) => setActivePatternRequest({ key, params })}
+            />
           </div>
         )}
 
@@ -493,6 +699,17 @@ export default function MapCommandCenter() {
             </Button>
           </div>
         </div>
+      )}
+      {/* Waypoint Action Editor Drawer */}
+      {editingWaypointId && (
+        <WaypointActionEditor 
+          waypoint={activeWaypoints.find(w => w.id === editingWaypointId)!}
+          onSave={(actions) => {
+            updateWaypointActions(editingWaypointId, actions);
+            setEditingWaypointId(null);
+          }}
+          onClose={() => setEditingWaypointId(null)}
+        />
       )}
     </div>
   );

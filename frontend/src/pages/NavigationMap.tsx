@@ -7,7 +7,7 @@ export interface MapRendererProps {
   height: number;
   vesselPosition: { lat: number; lng: number };
   sensorData: SensorData;
-  latLngToCanvas: (lat: number, lng: number, w: number, h: number) => { x: number; y: number };
+  latLngToCanvas: (lat: number, lng: number) => { x: number; y: number };
 }
 
 export function renderNavigationMap({
@@ -18,7 +18,7 @@ export function renderNavigationMap({
   sensorData,
   latLngToCanvas
 }: MapRendererProps) {
-  const vesselPos = latLngToCanvas(vesselPosition.lat, vesselPosition.lng, width, height);
+  const vesselPos = latLngToCanvas(vesselPosition.lat, vesselPosition.lng);
 
   // Depth contour lines (simulated)
   const depthContours = [10, 20, 30, 40, 50];
@@ -49,7 +49,7 @@ export function renderNavigationMap({
   // Wind/current vector arrows (overlaid at grid points)
   for (let x = 100; x < width; x += 150) {
     for (let y = 100; y < height; y += 150) {
-      const angle = ((sensorData.currentMeter.direction - 90) * Math.PI) / 180 + (Math.random() - 0.5) * 0.5;
+      const angle = ((sensorData.currentMeter.direction - 90) * Math.PI) / 180;
       const length = 20 + sensorData.currentMeter.speed * 5;
       
       ctx.save();
