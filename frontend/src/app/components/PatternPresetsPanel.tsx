@@ -94,16 +94,19 @@ export default function PatternPresetsPanel({
   ];
 
   return (
-    <Card className="bg-marine-dark/90 backdrop-blur-md border-marine-border p-3 shadow-2xl">
+    <Card className="bg-black/40 backdrop-blur-xl border-white/10 p-3 shadow-2xl rounded-xl">
       <div className="flex items-center justify-between mb-2">
-        <h3 className="text-[10px] font-bold text-marine-text uppercase tracking-widest">Survey Patterns</h3>
+        <h3 className="text-[10px] font-bold text-white/80 uppercase tracking-widest flex items-center gap-1.5">
+          <div className="w-1.5 h-1.5 rounded-full bg-marine-accent animate-pulse"></div>
+          Survey Patterns
+        </h3>
         <Button 
           size="sm" 
-          variant="outline" 
+          variant="ghost" 
           onClick={() => setIsOpen(!isOpen)}
-          className="h-7 text-[10px] px-2 font-bold uppercase border-marine-border hover:bg-marine-accent/10"
+          className="h-6 text-[9px] px-2 font-bold uppercase rounded-full bg-white/5 hover:bg-white/10 text-white"
         >
-          {isOpen ? 'Close' : 'Choose Pattern'}
+          {isOpen ? 'Close' : 'Choose'}
           <ChevronDown className={`w-3 h-3 ml-1 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
         </Button>
       </div>
@@ -116,10 +119,12 @@ export default function PatternPresetsPanel({
                 <button
                   key={p.id}
                   onClick={() => setSelectedPattern(p.id as PatternType)}
-                  className="flex items-center gap-3 p-2 rounded hover:bg-marine-accent/10 text-marine-text text-left transition-colors group"
+                  className="flex items-center gap-3 p-2 rounded-lg hover:bg-white/10 text-white/90 text-left transition-colors group"
                 >
-                  <p.icon className="w-4 h-4 text-marine-accent group-hover:scale-110 transition-transform" />
-                  <span className="text-xs font-semibold">{p.name}</span>
+                  <div className="bg-marine-accent/20 p-1.5 rounded text-marine-accent group-hover:scale-110 transition-transform">
+                    <p.icon className="w-3.5 h-3.5" />
+                  </div>
+                  <span className="text-[11px] font-semibold tracking-wide">{p.name}</span>
                 </button>
               ))}
             </div>
@@ -137,14 +142,14 @@ export default function PatternPresetsPanel({
               <div className="grid grid-cols-2 gap-2">
                 {Object.entries(params[selectedPattern]).map(([key, val]) => (
                   <div key={key} className="flex flex-col gap-1">
-                    <label className="text-[9px] uppercase text-marine-text-secondary font-mono">
+                    <label className="text-[9px] uppercase text-white/50 font-mono tracking-tighter">
                       {key.replace('M', ' (m)').replace('Deg', ' (°)')}
                     </label>
                     <input
                       type="number"
                       value={val as any}
                       onChange={(e) => updateParam(selectedPattern, key, parseFloat(e.target.value))}
-                      className="bg-marine-surface border border-marine-border rounded px-2 py-1 text-[11px] text-marine-text focus:border-marine-accent outline-none"
+                      className="bg-black/40 border border-white/10 rounded px-2 py-1 text-[11px] text-white focus:border-marine-accent focus:bg-white/5 outline-none font-mono"
                     />
                   </div>
                 ))}
@@ -153,18 +158,18 @@ export default function PatternPresetsPanel({
               <div className="flex gap-2 pt-2">
                 <Button 
                   size="sm" 
-                  className="flex-1 text-[10px] bg-marine-accent/20 hover:bg-marine-accent/30 text-marine-accent border border-marine-accent/30 h-8"
+                  className="flex-1 text-[10px] bg-marine-accent/20 hover:bg-marine-accent/30 text-marine-accent border border-marine-accent/30 h-8 rounded-full"
                   onClick={() => handleApply(vesselPos)}
                 >
                   <MapPin className="w-3 h-3 mr-1.5" /> At Vessel
                 </Button>
                 <Button 
                   size="sm" 
-                  variant="outline"
-                  className="flex-1 text-[10px] h-8 border-marine-border"
+                  variant="ghost"
+                  className="flex-1 text-[10px] h-8 border border-white/10 bg-white/5 hover:bg-white/10 text-white rounded-full"
                   onClick={() => onWaitClick(selectedPattern)}
                 >
-                  <MousePointer2 className="w-3 h-3 mr-1.5" /> Select Point
+                  <MousePointer2 className="w-3 h-3 mr-1.5 text-white/60" /> Map
                 </Button>
               </div>
             </div>

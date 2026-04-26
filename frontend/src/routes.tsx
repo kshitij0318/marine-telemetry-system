@@ -5,7 +5,7 @@ import GNSSDashboard from "./pages/GNSSDashboard";
 import CTDDashboard from "./pages/CTDDashboard";
 import CurrentMeterDashboard from "./pages/CurrentMeterDashboard";
 import ThrusterDashboard from "./pages/ThrusterDashboard";
-import OASDashboard from "./pages/OASDashboard";
+import RadarDashboard from "./pages/RadarDashboard";
 import FleetOverview from "./pages/FleetOverview";
 import Settings from "./pages/Settings";
 
@@ -21,7 +21,7 @@ export const router = createBrowserRouter([
       { path: "ctd", Component: CTDDashboard },
       { path: "current-meter", Component: CurrentMeterDashboard },
       { path: "thruster", Component: ThrusterDashboard },
-      { path: "oas", Component: OASDashboard },
+      { path: "radar", Component: RadarDashboard },
       { path: "settings", Component: Settings },
     ],
   },

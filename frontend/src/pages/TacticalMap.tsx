@@ -14,21 +14,21 @@ export function renderTacticalMap({
 
   // Threat radius circles
   // Feature 7: Aligned threat colors with RadarDisplay.tsx marine-dark theme
-  sensorData.oas.detections.forEach((detection: any) => {
+  sensorData.radar.targets?.forEach((target: any) => {
     const threatRadii: Record<string, number> = { low: 50, medium: 100, high: 150 };
-    const radius = threatRadii[detection.threat] || 50;
+    const radius = threatRadii[target.threat] || 50;
     
     const pixelsPerMeter = 10000 / 111320;
-    const obstacleAngle = ((sensorData.gnss.heading + detection.angle) - 90) * Math.PI / 180;
-    const px = vesselPos.x + Math.cos(obstacleAngle) * (detection.distance * pixelsPerMeter);
-    const py = vesselPos.y + Math.sin(obstacleAngle) * (detection.distance * pixelsPerMeter);
+    const obstacleAngle = ((sensorData.gnss.heading + target.bearingDeg) - 90) * Math.PI / 180;
+    const px = vesselPos.x + Math.cos(obstacleAngle) * (target.rangem * pixelsPerMeter);
+    const py = vesselPos.y + Math.sin(obstacleAngle) * (target.rangem * pixelsPerMeter);
     
     ctx.beginPath();
     ctx.arc(px, py, radius, 0, 2 * Math.PI);
     
     // Feature 7 standardized hex codes
-    if (detection.threat === 'high') ctx.strokeStyle = '#f87171';
-    else if (detection.threat === 'medium') ctx.strokeStyle = '#fbbf24';
+    if (target.threat === 'high' || target.threat === 'critical') ctx.strokeStyle = '#f87171';
+    else if (target.threat === 'medium') ctx.strokeStyle = '#fbbf24';
     else ctx.strokeStyle = '#4ade80';
 
     ctx.lineWidth = 2;
@@ -113,8 +113,8 @@ export function TacticalMapHUD({ sensorData }: TacticalHUDProps) {
           <span className="text-green-400 text-xs font-mono">CURRENT</span>
         </div>
         <div className="flex items-center gap-2">
-          <div className={`w-2 h-2 rounded-full ${sensorData.oas.status === 'active' ? 'bg-green-400 animate-pulse' : 'bg-red-400'}`}></div>
-          <span className="text-green-400 text-xs font-mono">OAS</span>
+          <div className={`w-2 h-2 rounded-full ${sensorData.radar.status === 'active' ? 'bg-green-400 animate-pulse' : 'bg-red-400'}`}></div>
+          <span className="text-green-400 text-xs font-mono">RADAR</span>
         </div>
       </div>
       <div className="border-t border-green-500/30 mt-2 pt-2">

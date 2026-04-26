@@ -29,7 +29,7 @@ function checkAndEmitAlerts(aggregatedState, missionState) {
 
   const gnss = aggregatedState?.gnss;
   const thruster = aggregatedState?.thruster;
-  const oas = aggregatedState?.oas;
+  const radar = aggregatedState?.radar;
   const ctd = aggregatedState?.ctd;
 
   // ── Mission status alerts ──────────────────────────────────────────────────
@@ -106,12 +106,12 @@ function checkAndEmitAlerts(aggregatedState, missionState) {
     }
   }
 
-  // ── OAS alerts ─────────────────────────────────────────────────────────────
-  if (oas?.detections) {
-    const highThreats = oas.detections.filter(d => d.threat === 'high');
+  // ── Radar alerts ─────────────────────────────────────────────────────────────
+  if (radar?.detections) {
+    const highThreats = radar.detections.filter(d => d.threat === 'high');
     if (highThreats.length > 0) {
       const nearest = Math.min(...highThreats.map(d => d.distance));
-      emit('oas-collision', 15000, {
+      emit('radar-collision', 15000, {
         severity: 'critical',
         category: 'safety',
         title: `Collision Warning — ${highThreats.length} Obstacle(s)`,

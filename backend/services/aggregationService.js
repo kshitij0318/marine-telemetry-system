@@ -9,7 +9,7 @@ const SENSOR_TYPE_TO_KEY = {
   CTD:         'ctd',
   CURRENTMETER:'currentMeter',
   THRUSTER:    'thruster',
-  OAS:         'oas',
+  RADAR:       'radar',
 };
 
 class AggregationService {
@@ -24,7 +24,7 @@ class AggregationService {
    * Recompute aggregated state for a vessel.
    * Instead of a flat merged object (which caused field collisions),
    * we now produce NAMESPACED sensor data:
-   *   state.gnss, state.ctd, state.currentMeter, state.thruster, state.oas
+   *   state.gnss, state.ctd, state.currentMeter, state.thruster, state.radar
    * Each namespace contains ALL fields emitted by that simulator.
    */
   recomputeVessel(vesselId) {

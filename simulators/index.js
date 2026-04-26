@@ -4,7 +4,7 @@ const GNSSSimulator = require("./gnss/GNSSSimulator");
 const CTDSimulator = require("./ctd/CTDSimulator");
 const CurrentMeterSimulator = require("./currentMeter/CurrentMeterSimulator");
 const ThrusterSimulator = require("./thruster/ThrusterSimulator");
-const OASSimulator = require("./oas/OASSimulator");
+const RadarSimulator = require("./radar/radarSimulator");
 
 const vesselId = process.env.VESSEL_ID || "V001";
 
@@ -80,5 +80,5 @@ client.on("connect", () => {
   CTDSimulator.start(client, vesselId, shipState);
   CurrentMeterSimulator.start(client, vesselId, shipState);
   ThrusterSimulator.start(client, vesselId, shipState);
-  OASSimulator.start(client, vesselId, shipState);
+  RadarSimulator.start(client, vesselId, shipState);
 });

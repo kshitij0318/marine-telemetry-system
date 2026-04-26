@@ -27,10 +27,10 @@ module.exports = {
       `vessel/${vesselId}/thruster/${deviceId}/command`
   },
 
-  OAS: {
+  RADAR: {
     buildDataTopic: (vesselId, deviceId) =>
-      `vessel/${vesselId}/oas/${deviceId}/data`,
+      `vessel/${vesselId}/radar/${deviceId}/data`,
     buildCommandTopic: (vesselId, deviceId) =>
-      `vessel/${vesselId}/oas/${deviceId}/command`
+      `vessel/${vesselId}/radar/${deviceId}/command`
   }
 };

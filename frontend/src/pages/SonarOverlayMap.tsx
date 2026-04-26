@@ -32,7 +32,7 @@ export const SonarDisplay = () => {
         ctx.stroke();
         ctx.fillStyle = 'rgba(0,212,255,0.5)';
         ctx.font = '10px monospace';
-        ctx.fillText(`${(dataRef.current.oas.range * f).toFixed(0)}m`, cx + R*f + 4, cy);
+        ctx.fillText(`${(dataRef.current.radar.range * f).toFixed(0)}m`, cx + R*f + 4, cy);
       });
 
       // Cross hairs
@@ -56,14 +56,14 @@ export const SonarDisplay = () => {
       ctx.fillStyle = grad;
       ctx.fill();
 
-      // Detections
-      const detections = dataRef.current.oas.detections ?? [];
-      detections.forEach((det: any) => {
-        const angle = (det.angle - 90) * Math.PI / 180;
-        const r = (det.distance / dataRef.current.oas.range) * R;
+      // Targets
+      const targets = dataRef.current.radar.targets ?? [];
+      targets.forEach((target: any) => {
+        const angle = (target.bearingDeg - 90) * Math.PI / 180;
+        const r = (target.rangem / dataRef.current.radar.range) * R;
         const dx = cx + Math.cos(angle) * r;
         const dy = cy + Math.sin(angle) * r;
-        const color = det.threat === 'high' ? '#ff3b3b' : det.threat === 'medium' ? '#ffb800' : '#00ff9d';
+        const color = target.threat === 'high' || target.threat === 'critical' ? '#ff3b3b' : target.threat === 'medium' ? '#ffb800' : '#00ff9d';
 
         ctx.beginPath();
         ctx.arc(dx, dy, 6, 0, Math.PI * 2);
@@ -79,7 +79,7 @@ export const SonarDisplay = () => {
 
         ctx.fillStyle = color;
         ctx.font = '9px monospace';
-        ctx.fillText(`${det.distance.toFixed(0)}m`, dx + 8, dy - 4);
+        ctx.fillText(`${target.rangem.toFixed(0)}m`, dx + 8, dy - 4);
       });
 
       // Vessel dot center

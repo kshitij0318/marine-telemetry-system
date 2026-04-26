@@ -6,7 +6,7 @@ import type { SensorStatus } from '../../contexts/TelemetryContext';
 interface SensorBarItem {
   name: string;
   path: string;
-  statusKey: 'gnss' | 'ctd' | 'currentMeter' | 'thruster' | 'oas';
+  statusKey: 'gnss' | 'ctd' | 'currentMeter' | 'thruster' | 'radar';
 }
 
 const sensorItems: SensorBarItem[] = [
@@ -14,7 +14,7 @@ const sensorItems: SensorBarItem[] = [
   { name: 'CTD', path: '/ctd', statusKey: 'ctd' },
   { name: 'Current Meter', path: '/current-meter', statusKey: 'currentMeter' },
   { name: 'Thruster', path: '/thruster', statusKey: 'thruster' },
-  { name: 'OAS', path: '/oas', statusKey: 'oas' },
+  { name: 'RADAR', path: '/radar', statusKey: 'radar' },
 ];
 
 function getStatusColor(status: SensorStatus): string {

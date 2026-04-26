@@ -155,8 +155,8 @@ export default function FleetOverview() {
                     <SensorLED active={sensorData.thruster.status === 'ACTIVE' || sensorData.thruster.status === 'active'} ping />
                   </div>
                   <div className="flex flex-col items-center">
-                    <span className="text-[10px] text-marine-text-secondary mb-1">OAS</span>
-                    <SensorLED active={sensorData.oas.status === 'ACTIVE' || sensorData.oas.status === 'active'} ping />
+                    <span className="text-[10px] text-marine-text-secondary mb-1">RADAR</span>
+                    <SensorLED active={sensorData.radar.status === 'ACTIVE' || sensorData.radar.status === 'active'} ping />
                   </div>
                 </div>
               </div>

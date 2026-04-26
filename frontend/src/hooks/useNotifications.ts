@@ -7,7 +7,7 @@ export interface Notification {
   timestamp: number;
   message: string;
   severity: 'low' | 'medium' | 'high';
-  source: 'system' | 'gnss' | 'ctd' | 'thruster' | 'oas' | 'mission';
+  source: 'system' | 'gnss' | 'ctd' | 'thruster' | 'radar' | 'mission';
   read: boolean;
 }
 
@@ -67,11 +67,11 @@ export function useNotifications() {
       addNotification(`GNSS Signal lost or heavily degraded (HDOP: ${sensorData.gnss.hdop})`, 'high', 'gnss');
     }
 
-    // OAS Checks
-    if (sensorData.oas.detections && sensorData.oas.detections.length > 0) {
-      const highThreats = sensorData.oas.detections.filter(d => d.threat === 'high');
+    // Radar Checks
+    if (sensorData.radar.detections && sensorData.radar.detections.length > 0) {
+      const highThreats = sensorData.radar.detections.filter(d => d.threat === 'high');
       if (highThreats.length > 0) {
-         addNotification(`OAS: Immediate collision risk. ${highThreats.length} high-threat object(s) detected.`, 'high', 'oas');
+         addNotification(`Radar: Immediate collision risk. ${highThreats.length} high-threat object(s) detected.`, 'high', 'radar');
       }
     }
 

@@ -321,7 +321,7 @@ export default function MapCommandCenter() {
   };
 
   return (
-    <div className="relative h-screen bg-marine-dark overflow-hidden flex flex-col">
+    <div className="relative h-[calc(100vh-4rem)] bg-marine-dark overflow-hidden flex flex-col">
       <div className="flex-1 relative">
         <MapContainer 
           center={[animatedPos.lat, animatedPos.lng]} 
@@ -387,23 +387,71 @@ export default function MapCommandCenter() {
           )}
         </MapContainer>
 
-        {/* Floating Controls */}
-        <div className="absolute top-4 right-4 z-[1000] flex flex-col gap-2">
-          <Card className="bg-marine-dark/90 backdrop-blur-md border-marine-border p-2 flex flex-col gap-1 shadow-2xl">
-            <Button size="icon" variant={mapMode === 'navigation' ? 'default' : 'ghost'} onClick={() => setMapMode('navigation')} className="w-10 h-10">
-              <Navigation2 className="w-5 h-5" title="Navigation Mode" />
-            </Button>
-            <Button size="icon" variant={mapMode === 'mission' ? 'default' : 'ghost'} onClick={() => setMapMode('mission')} className="w-10 h-10">
-              <Play className="w-5 h-5" title="Mission Planning" />
-            </Button>
-            <Button size="icon" variant={mapMode === 'tactical' ? 'default' : 'ghost'} onClick={() => setMapMode('tactical')} className="w-10 h-10">
-              <Layers className="w-5 h-5" title="Tactical Layers" />
-            </Button>
-            <div className="h-px bg-marine-border my-1" />
-            <Button size="icon" variant={followVessel ? 'default' : 'ghost'} onClick={() => setFollowVessel(!followVessel)} className={`w-10 h-10 ${followVessel ? 'text-marine-accent' : ''}`}>
-              <Crosshair className="w-5 h-5" title="Follow Vessel" />
-            </Button>
-          </Card>
+        {/* Floating Controls & Right Side Panels */}
+        <div className="absolute top-4 right-4 z-[1000] flex flex-col gap-3 w-72 max-h-[calc(100vh-8rem)]">
+          <div className="flex justify-end w-full">
+            <Card className="bg-marine-dark/90 backdrop-blur-md border-marine-border p-2 flex flex-col gap-1 shadow-2xl w-fit">
+              <Button size="icon" variant={mapMode === 'navigation' ? 'default' : 'ghost'} onClick={() => setMapMode('navigation')} className="w-10 h-10">
+                <Navigation2 className="w-5 h-5" title="Navigation Mode" />
+              </Button>
+              <Button size="icon" variant={mapMode === 'mission' ? 'default' : 'ghost'} onClick={() => setMapMode('mission')} className="w-10 h-10">
+                <Play className="w-5 h-5" title="Mission Planning" />
+              </Button>
+              <Button size="icon" variant={mapMode === 'tactical' ? 'default' : 'ghost'} onClick={() => setMapMode('tactical')} className="w-10 h-10">
+                <Layers className="w-5 h-5" title="Tactical Layers" />
+              </Button>
+              <div className="h-px bg-marine-border my-1" />
+              <Button size="icon" variant={followVessel ? 'default' : 'ghost'} onClick={() => setFollowVessel(!followVessel)} className={`w-10 h-10 ${followVessel ? 'text-marine-accent' : ''}`}>
+                <Crosshair className="w-5 h-5" title="Follow Vessel" />
+              </Button>
+            </Card>
+          </div>
+
+          {mapMode === 'mission' && (
+            <div className="flex flex-col gap-3 flex-1 overflow-y-auto pr-1 custom-scrollbar">
+              {/* Avoidance Tool */}
+              <Card className="bg-black/40 backdrop-blur-xl border-white/10 p-3 shadow-2xl rounded-xl">
+                 <div className="flex items-center justify-between mb-2">
+                   <h3 className="text-[10px] font-bold text-white/80 uppercase tracking-widest flex items-center gap-1.5">
+                     <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse"></div>
+                     Zone Management
+                   </h3>
+                   <Button size="sm" variant={isDrawingZone ? 'destructive' : 'ghost'} onClick={() => {
+                     if(isDrawingZone) setCurrentZonePoints([]);
+                     setIsDrawingZone(!isDrawingZone);
+                   }} className={`h-6 text-[9px] px-2 font-bold uppercase rounded-full ${isDrawingZone ? '' : 'bg-white/5 hover:bg-white/10 text-white'}`}>
+                     {isDrawingZone ? 'Cancel' : '+ New Zone'}
+                   </Button>
+                 </div>
+                 
+                 {isDrawingZone && (
+                   <div className="text-[9px] text-amber-300 bg-amber-500/10 p-1.5 rounded border border-amber-500/20 mb-2 font-mono leading-tight">
+                     Click map for corners. Dbl-click to close.
+                   </div>
+                 )}
+
+                 <div className="flex flex-wrap gap-1.5">
+                   {avoidanceZones.map((zone, idx) => (
+                      <div key={zone.id} className="flex items-center gap-1 bg-red-500/20 border border-red-500/30 px-2 py-0.5 rounded-full backdrop-blur-sm">
+                        <span className="text-[9px] font-bold text-red-100">Z-{idx+1}</span>
+                        <button onClick={() => setAvoidanceZones(p => p.filter(z => z.id !== zone.id))} className="text-red-300 hover:text-white transition-colors">
+                          <Trash2 size={10} />
+                        </button>
+                      </div>
+                    ))}
+                 </div>
+              </Card>
+
+              <PatternPresetsPanel 
+                 vesselPos={animatedPos}
+                 onApplyPattern={(newWps) => {
+                   const mapped = newWps.map((wp, i) => ({ ...wp, id: `wp-${Date.now()}-${i}` }));
+                   setOriginalWaypoints([...originalWaypoints, ...mapped]);
+                 }}
+                 onWaitClick={(key, params) => setActivePatternRequest({ key, params })}
+              />
+            </div>
+          )}
         </div>
 
         {/* Mission Planning Panel */}
@@ -567,44 +615,6 @@ export default function MapCommandCenter() {
               </div>
             </Card>
 
-            {/* Avoidance Tool */}
-            <Card className="bg-marine-dark/90 backdrop-blur-md border-marine-border p-4 shadow-2xl">
-               <div className="flex items-center justify-between mb-3">
-                 <h3 className="text-[10px] font-bold text-marine-text uppercase tracking-widest">Zone Management</h3>
-                 <Button size="sm" variant={isDrawingZone ? 'destructive' : 'outline'} onClick={() => {
-                   if(isDrawingZone) setCurrentZonePoints([]);
-                   setIsDrawingZone(!isDrawingZone);
-                 }} className="h-7 text-[10px] px-2 font-bold uppercase">
-                   {isDrawingZone ? 'Cancel' : '+ Def Zone'}
-                 </Button>
-               </div>
-               
-               {isDrawingZone && (
-                 <div className="text-[10px] text-amber-400 bg-amber-400/5 p-2 rounded border border-amber-400/20 mb-2 font-mono">
-                   Click map to add corners. Double-click to close zone.
-                 </div>
-               )}
-
-               <div className="flex flex-wrap gap-1.5">
-                 {avoidanceZones.map((zone, idx) => (
-                    <div key={zone.id} className="flex items-center gap-1 bg-red-500/10 border border-red-500/30 px-2 py-0.5 rounded-full">
-                      <span className="text-[9px] font-bold text-red-100">Z-{idx+1}</span>
-                      <button onClick={() => setAvoidanceZones(p => p.filter(z => z.id !== zone.id))} className="text-red-400 hover:text-red-200">
-                        <Trash2 size={10} />
-                      </button>
-                    </div>
-                  ))}
-               </div>
-            </Card>
-
-            <PatternPresetsPanel 
-               vesselPos={animatedPos}
-               onApplyPattern={(newWps) => {
-                 const mapped = newWps.map((wp, i) => ({ ...wp, id: `wp-${Date.now()}-${i}` }));
-                 setOriginalWaypoints([...originalWaypoints, ...mapped]);
-               }}
-               onWaitClick={(key, params) => setActivePatternRequest({ key, params })}
-            />
           </div>
         )}
 

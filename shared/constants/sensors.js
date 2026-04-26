@@ -3,5 +3,5 @@ module.exports = {
   GNSS: "GNSS",
   CURRENTMETER: "CURRENTMETER",
   THRUSTER: "THRUSTER",
-  OAS: "OAS"
+  RADAR: "RADAR"
 };

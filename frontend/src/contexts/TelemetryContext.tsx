@@ -59,8 +59,12 @@ export interface SensorData {
     tempWarningThreshold?: number;
     status: SensorStatus;
   };
-  oas: {
-    detections: Array<{ id: string; angle: number; distance: number; threat: 'low' | 'medium' | 'high'; worldLat: number; worldLng: number }>;
+  radar: {
+    rotationAngle: number;
+    targets: Array<{ id: string; type: string; worldLat: number; worldLng: number; absoluteBearingDeg: number; bearingDeg: number; rangem: number; speedMps: number; courseDeg: number; cpa: number; tcpa: number; cri: number; threat: 'low' | 'medium' | 'high' | 'critical' }>;
+    detections: Array<{ id: string; angle: number; distance: number; threat: 'low' | 'medium' | 'high'; worldLat: number; worldLng: number }>; // Legacy Phase 1 support
+    oasSensors: any[];
+    suggestedManeuver: { action: string; reason: string } | null;
     range: number;
     config?: { operatingRange: number; frequency: number; beamWidth: number; pulseLength: number; mode: string };
     performance?: { pingRate: number; signalStrength: number; noiseFloor: number; targetStrength: number };
@@ -136,8 +140,12 @@ export function useLiveTelemetry() {
       runtimeMinutes: 0,
       status: 'offline',
     },
-    oas: {
+    radar: {
+      rotationAngle: 0,
+      targets: [],
       detections: [],
+      oasSensors: [],
+      suggestedManeuver: null,
       range: 200,
       status: 'offline',
     },
@@ -247,14 +255,18 @@ export function useLiveTelemetry() {
                 tempWarningThreshold: state.thruster?.tempWarningThreshold ?? prev.thruster.tempWarningThreshold,
                 status: state.thruster?.status?.toLowerCase() as any ?? (state.thruster?.rpm !== undefined ? 'active' : prev.thruster.status),
               },
-              oas: {
-                ...prev.oas,
-                range: state.oas?.range ?? prev.oas.range,
-                config: state.oas?.config ?? prev.oas.config,
-                performance: state.oas?.performance ?? prev.oas.performance,
-                statistics: state.oas?.statistics ?? prev.oas.statistics,
-                detections: state.oas?.detections || prev.oas.detections,
-                status: state.oas?.status === 'SCANNING' ? 'active' : (state.oas?.status?.toLowerCase() as any || prev.oas.status),
+              radar: {
+                ...prev.radar,
+                rotationAngle: state.radar?.rotationAngle ?? prev.radar.rotationAngle,
+                targets: state.radar?.targets || prev.radar.targets,
+                oasSensors: state.radar?.oasSensors || prev.radar.oasSensors,
+                suggestedManeuver: state.radar?.suggestedManeuver !== undefined ? state.radar.suggestedManeuver : prev.radar.suggestedManeuver,
+                range: state.radar?.range ?? prev.radar.range,
+                config: state.radar?.config ?? prev.radar.config,
+                performance: state.radar?.performance ?? prev.radar.performance,
+                statistics: state.radar?.statistics ?? prev.radar.statistics,
+                detections: state.radar?.detections || prev.radar.detections,
+                status: state.radar?.status === 'SCANNING' ? 'active' : (state.radar?.status?.toLowerCase() as any || prev.radar.status),
               }
             };
             

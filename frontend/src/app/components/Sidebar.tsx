@@ -16,7 +16,7 @@ const navItems: NavItem[] = [
   { icon: Droplet, label: 'CTD', path: '/ctd' },
   { icon: Waves, label: 'Current Meter', path: '/current-meter' },
   { icon: Fan, label: 'Thruster', path: '/thruster' },
-  { icon: Radio, label: 'OAS', path: '/oas' },
+  { icon: Radio, label: 'Radar', path: '/radar' },
   { icon: Settings, label: 'Settings', path: '/settings' },
 ];
 
