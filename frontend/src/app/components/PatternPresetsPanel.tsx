@@ -16,7 +16,7 @@ import {
 interface PatternPresetsPanelProps {
   vesselPos: { lat: number; lng: number };
   onApplyPattern: (waypoints: Array<{ lat: number; lng: number; name: string }>) => void;
-  onWaitClick: (patternKey: string) => void;
+  onWaitClick: (patternKey: string, params: any) => void;
 }
 
 type PatternType = 'LAWNMOWER' | 'SPIRAL' | 'EXPANDING_SQUARE' | 'RADIAL' | 'CROSSHATCH';
@@ -167,7 +167,7 @@ export default function PatternPresetsPanel({
                   size="sm" 
                   variant="ghost"
                   className="flex-1 text-[10px] h-8 border border-white/10 bg-white/5 hover:bg-white/10 text-white rounded-full"
-                  onClick={() => onWaitClick(selectedPattern)}
+                  onClick={() => onWaitClick(selectedPattern, params[selectedPattern])}
                 >
                   <MousePointer2 className="w-3 h-3 mr-1.5 text-white/60" /> Map
                 </Button>

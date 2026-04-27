@@ -16,12 +16,12 @@ export default function Root() {
       <TelemetryProvider>
         <MissionProvider>
           <DndProvider backend={HTML5Backend}>
-            <div className="min-h-screen bg-marine-dark">
+            <div className="flex h-screen bg-marine-dark overflow-hidden">
               <Sidebar />
-              <div className="ml-16">
+              <div className="flex-1 flex flex-col min-w-0 ml-16">
                 <Header />
                 <SensorBar />
-                <main className="min-h-[calc(100vh-4rem)]">
+                <main className="flex-1 overflow-auto relative custom-scrollbar">
                   <Outlet />
                 </main>
               </div>
@@ -31,5 +31,6 @@ export default function Root() {
         </MissionProvider>
       </TelemetryProvider>
     </ThemeProvider>
+
   );
 }

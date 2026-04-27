@@ -91,11 +91,85 @@ export default function MapCommandCenter() {
     active: false, status: 'complete', deltaDistance: 0, modifiedWaypoints: 0,
   });
 
+  const [selectedWaypointId, setSelectedWaypointId] = useState<string | null>(null);
+  const [editingPos, setEditingPos] = useState<{ lat: number; lng: number } | null>(null);
+
+  // Nudge step in degrees (~55m)
+  const NUDGE_DEG = 0.0005;
+
   const updateWaypointPosition = (id: string, newLat: number, newLng: number) => {
-    setOriginalWaypoints(prev => prev.map(wp => 
+    setOriginalWaypoints(prev => prev.map(wp =>
       wp.id === id ? { ...wp, lat: newLat, lng: newLng } : wp
     ));
   };
+
+  // Select a waypoint for editing
+  const selectWaypoint = (wp: Waypoint) => {
+    if (missionState?.active) return;
+    setSelectedWaypointId(wp.id);
+    setEditingPos({ lat: wp.lat, lng: wp.lng });
+  };
+
+  // Confirm move: apply editingPos to the selected waypoint
+  const confirmWaypointMove = () => {
+    if (selectedWaypointId && editingPos) {
+      updateWaypointPosition(selectedWaypointId, editingPos.lat, editingPos.lng);
+    }
+    setSelectedWaypointId(null);
+    setEditingPos(null);
+  };
+
+  // Cancel move
+  const cancelWaypointMove = () => {
+    setSelectedWaypointId(null);
+    setEditingPos(null);
+  };
+
+  // Refs for keyboard handler to avoid effect re-runs
+  const confirmRef = useRef(confirmWaypointMove);
+  const cancelRef = useRef(cancelWaypointMove);
+  const editingPosRef = useRef(editingPos);
+
+  useEffect(() => { confirmRef.current = confirmWaypointMove; }, [confirmWaypointMove]);
+  useEffect(() => { cancelRef.current = cancelWaypointMove; }, [cancelWaypointMove]);
+  useEffect(() => { editingPosRef.current = editingPos; }, [editingPos]);
+
+  // Keyboard arrow-key nudge
+  useEffect(() => {
+    if (!selectedWaypointId) return;
+
+    const handler = (e: KeyboardEvent) => {
+      const keys = ['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Enter','Escape'];
+      if (!keys.includes(e.key)) return;
+
+      // CRITICAL: Stop page from scrolling
+      e.preventDefault();
+      e.stopPropagation();
+
+      if (e.key === 'Enter') {
+        confirmRef.current();
+        return;
+      }
+      if (e.key === 'Escape') {
+        cancelRef.current();
+        return;
+      }
+
+      setEditingPos(prev => {
+        if (!prev) return prev;
+        const step = e.shiftKey ? NUDGE_DEG * 5 : NUDGE_DEG;
+        return {
+          lat: prev.lat + (e.key === 'ArrowUp' ? step : e.key === 'ArrowDown' ? -step : 0),
+          lng: prev.lng + (e.key === 'ArrowRight' ? step : e.key === 'ArrowLeft' ? -step : 0),
+        };
+      });
+    };
+
+    // Use capture: true to ensure we get the event before Leaflet or the browser
+    window.addEventListener('keydown', handler, { capture: true });
+    return () => window.removeEventListener('keydown', handler, { capture: true });
+  }, [selectedWaypointId]);
+
 
   const planningMetrics = useMemo(() => {
     const wps = reroutedWaypoints.length > 0 ? reroutedWaypoints : originalWaypoints;
@@ -152,6 +226,8 @@ export default function MapCommandCenter() {
     setLandError('');
     setActivePatternRequest(null);
     setEditingWaypointId(null);
+    setSelectedWaypointId(null);
+    setEditingPos(null);
   };
 
   const handleSaveMission = () => {
@@ -241,18 +317,8 @@ export default function MapCommandCenter() {
 
   const handleMapClick = async (latlng: any) => {
     if (checkingWater) return;
-    if (isDrawingZone || mapMode === 'mission') {
-      setCheckingWater(true);
-      try {
-        const water = await isOnWater(latlng.lat, latlng.lng);
-        if (!water) {
-          setLandError('⚓ Invalid location — vessels cannot operate on land. Place waypoints in open water.');
-          setTimeout(() => setLandError(''), 4000);
-          return;
-        }
-      } catch { /* fail open */ } finally { setCheckingWater(false); }
-    }
 
+    // Pattern placement: skip water check, place pattern immediately
     if (activePatternRequest) {
       const { key, params } = activePatternRequest;
       let wps: { lat: number; lng: number }[] = [];
@@ -270,34 +336,63 @@ export default function MapCommandCenter() {
         id: `wp-${Date.now()}-${i}`,
         name: `${code}-${i + 1}`
       }));
-      setOriginalWaypoints([...originalWaypoints, ...newWPs]);
+      setOriginalWaypoints(prev => [...prev, ...newWPs]);
       setActivePatternRequest(null);
       return;
     }
 
+    // Zone drawing: add corner point
     if (isDrawingZone) {
-      setCurrentZonePoints([...currentZonePoints, { lat: latlng.lat, lng: latlng.lng }]);
-    } else if (mapMode === 'mission' && !missionState?.active && !navigationDestination?.set) {
-      const newWaypoint: Waypoint = {
-        id: `wp-${Date.now()}`,
-        lat: latlng.lat,
-        lng: latlng.lng,
-        name: `WP${originalWaypoints.length + 1}`,
-      };
-      setOriginalWaypoints([...originalWaypoints, newWaypoint]);
+      setCurrentZonePoints(prev => [...prev, { lat: latlng.lat, lng: latlng.lng }]);
+      return;
+    }
+
+    // If a waypoint is selected, clicking the map moves it there (preview only)
+    if (selectedWaypointId && editingPos) {
+      setEditingPos({ lat: latlng.lat, lng: latlng.lng });
+      return;
+    }
+
+    // Mission waypoint: validate water first
+    if (mapMode === 'mission') {
+      setCheckingWater(true);
+      try {
+        const water = await isOnWater(latlng.lat, latlng.lng);
+        if (!water) {
+          setLandError('⚓ Invalid location — vessels cannot operate on land. Place waypoints in open water.');
+          setTimeout(() => setLandError(''), 4000);
+          return;
+        }
+      } catch { /* fail open */ } finally { setCheckingWater(false); }
+      // Add mission waypoint (only in mission mode, not during an active mission)
+      if (!missionState?.active && !navigationDestination?.set) {
+        const newWaypoint: Waypoint = {
+          id: `wp-${Date.now()}`,
+          lat: latlng.lat,
+          lng: latlng.lng,
+          name: `WP${originalWaypoints.length + 1}`,
+        };
+        setOriginalWaypoints(prev => [...prev, newWaypoint]);
+      }
     }
   };
 
+
   const handleMapDblClick = (latlng: any) => {
-    if (isDrawingZone && currentZonePoints.length >= 2) {
-      const finalPoints = [...currentZonePoints, { lat: latlng.lat, lng: latlng.lng }];
-      const newZone: AvoidanceZone = {
-        id: `zone-${Date.now()}`,
-        points: finalPoints,
-        area: 0,
-        visible: true,
-      };
-      setAvoidanceZones([...avoidanceZones, newZone]);
+    if (isDrawingZone && currentZonePoints.length >= 1) {
+      // The double-click itself closes the zone — include this point only if it's not too close to last
+      const finalPoints = [...currentZonePoints];
+      // Need at least 3 points total to form a polygon
+      if (finalPoints.length >= 2) {
+        const newZone: AvoidanceZone = {
+          id: `zone-${Date.now()}`,
+          points: finalPoints,
+          area: 0,
+          visible: true,
+        };
+        setAvoidanceZones(prev => [...prev, newZone]);
+      }
+      // Reset drawing state — next zone will be completely independent
       setCurrentZonePoints([]);
       setIsDrawingZone(false);
     }
@@ -326,9 +421,15 @@ export default function MapCommandCenter() {
         <MapContainer 
           center={[animatedPos.lat, animatedPos.lng]} 
           zoom={14} 
-          className="h-full w-full z-0"
+          className={`h-full w-full z-0 ${activePatternRequest ? 'cursor-crosshair' : ''}`}
           zoomControl={false}
+          style={{ touchAction: 'none' }}
         >
+          {activePatternRequest && (
+            <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[1000] bg-marine-accent/20 border border-marine-accent text-marine-text font-mono text-xs px-3 py-1.5 rounded-full shadow-lg shadow-marine-accent/20 animate-pulse pointer-events-none">
+              Click anywhere on map to place pattern
+            </div>
+          )}
           <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" />
           <ChangeView center={[animatedPos.lat, animatedPos.lng]} zoom={14} follow={followVessel} />
           <MapEvents onClick={handleMapClick} onDblClick={handleMapDblClick} />
@@ -359,24 +460,64 @@ export default function MapCommandCenter() {
             positions={activeWaypoints.map(wp => [wp.lat, wp.lng])} 
             pathOptions={{ color: missionState?.active ? '#00ff9d' : '#00a8cc', weight: 3, lineJoin: 'round', opacity: 0.8 }} 
           />
-          {activeWaypoints.map((wp, i) => (
-            <Marker 
-              key={wp.id} 
-              position={[wp.lat, wp.lng]} 
-              draggable={!missionState?.active}
-              eventHandlers={{
-                drag: (e) => {
-                  const { lat, lng } = e.target.getLatLng();
-                  updateWaypointPosition(wp.id, lat, lng);
-                },
-                dragend: (e) => {
-                  const { lat, lng } = e.target.getLatLng();
-                  updateWaypointPosition(wp.id, lat, lng);
-                }
-              }}
-              icon={waypointIcon(wp.name, i === missionState?.currentWaypointIndex)} 
-            />
-          ))}
+
+          {/* Selected waypoint preview marker (follows editingPos) */}
+          {selectedWaypointId && editingPos && (() => {
+            const wp = originalWaypoints.find(w => w.id === selectedWaypointId);
+            if (!wp) return null;
+            return (
+              <Marker
+                key={`editing-${selectedWaypointId}`}
+                position={[editingPos.lat, editingPos.lng]}
+                icon={L.divIcon({
+                  className: 'custom-waypoint-icon',
+                  html: `<div style="position:relative;">
+                    <div style="width:22px;height:22px;border-radius:50%;border:3px solid #00ff9d;background:rgba(0,255,157,0.2);animation:ping 1s infinite;"></div>
+                    <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:8px;height:8px;background:#00ff9d;border-radius:50%;"></div>
+                    <div style="position:absolute;top:-18px;left:50%;transform:translateX(-50%);white-space:nowrap;font-size:9px;font-weight:700;color:#00ff9d;font-family:monospace;background:rgba(0,0,0,0.7);padding:1px 4px;border-radius:3px;">${wp.name}</div>
+                  </div>`,
+                  iconSize: [22, 22],
+                  iconAnchor: [11, 11],
+                })}
+              />
+            );
+          })()}
+
+          {activeWaypoints.map((wp, i) => {
+            const isSelected = wp.id === selectedWaypointId;
+            const displayPos: [number, number] = isSelected && editingPos
+              ? [editingPos.lat, editingPos.lng]
+              : [wp.lat, wp.lng];
+            return (
+              <Marker
+                key={`${wp.id}-marker`}
+                position={displayPos}
+                draggable={false}
+                eventHandlers={{
+                  click: () => {
+                    if (!missionState?.active && mapMode === 'mission') {
+                      if (isSelected) {
+                        confirmWaypointMove();
+                      } else {
+                        selectWaypoint(wp);
+                      }
+                    }
+                  }
+                }}
+                icon={L.divIcon({
+                  className: 'custom-waypoint-icon',
+                  html: isSelected
+                    ? `<div class="wp-marker" style="opacity:0;pointer-events:none;"><div class="wp-dot"></div><div class="wp-label">${wp.name}</div></div>`
+                    : `<div class="wp-marker ${i === missionState?.currentWaypointIndex ? 'animate-pulse scale-110' : 'opacity-80'}">
+                        <div class="wp-dot"></div>
+                        <div class="wp-label">${wp.name}</div>
+                      </div>`,
+                  iconSize: [20, 20],
+                  iconAnchor: [10, 10],
+                })}
+              />
+            );
+          })}
 
           {/* Avoidance Zones */}
           {avoidanceZones.filter(z => z.visible).map(zone => (
@@ -386,6 +527,56 @@ export default function MapCommandCenter() {
             <Polyline positions={currentZonePoints.map(p => [p.lat, p.lng])} pathOptions={{ color: '#ef4444', weight: 2, dashArray: '5, 5' }} />
           )}
         </MapContainer>
+
+        {/* Floating Waypoint Editor HUD */}
+        {selectedWaypointId && editingPos && (() => {
+          const wp = originalWaypoints.find(w => w.id === selectedWaypointId);
+          return (
+            <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[1000] flex flex-col items-center gap-2">
+              <div className="bg-black/80 backdrop-blur-xl border border-[#00ff9d]/50 rounded-2xl px-5 py-3 shadow-2xl shadow-[#00ff9d]/10 flex flex-col items-center gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-2 h-2 rounded-full bg-[#00ff9d] animate-pulse" />
+                  <span className="text-[11px] font-bold text-[#00ff9d] tracking-widest uppercase">Moving {wp?.name}</span>
+                  <div className="w-2 h-2 rounded-full bg-[#00ff9d] animate-pulse" />
+                </div>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {/* Arrow up */}
+                  <div />
+                  <button onClick={() => setEditingPos(p => p ? { lat: p.lat + NUDGE_DEG, lng: p.lng } : p)}
+                    className="w-8 h-8 bg-white/10 hover:bg-[#00ff9d]/20 border border-white/20 hover:border-[#00ff9d]/50 rounded-lg text-white text-sm font-bold transition-all flex items-center justify-center">▲</button>
+                  <div />
+                  {/* Arrow left/right */}
+                  <button onClick={() => setEditingPos(p => p ? { lat: p.lat, lng: p.lng - NUDGE_DEG } : p)}
+                    className="w-8 h-8 bg-white/10 hover:bg-[#00ff9d]/20 border border-white/20 hover:border-[#00ff9d]/50 rounded-lg text-white text-sm font-bold transition-all flex items-center justify-center">◀</button>
+                  <div className="w-8 h-8 bg-[#00ff9d]/10 border border-[#00ff9d]/30 rounded-lg flex items-center justify-center">
+                    <span className="text-[#00ff9d] text-[9px] font-mono font-bold">POS</span>
+                  </div>
+                  <button onClick={() => setEditingPos(p => p ? { lat: p.lat, lng: p.lng + NUDGE_DEG } : p)}
+                    className="w-8 h-8 bg-white/10 hover:bg-[#00ff9d]/20 border border-white/20 hover:border-[#00ff9d]/50 rounded-lg text-white text-sm font-bold transition-all flex items-center justify-center">▶</button>
+                  {/* Arrow down */}
+                  <div />
+                  <button onClick={() => setEditingPos(p => p ? { lat: p.lat - NUDGE_DEG, lng: p.lng } : p)}
+                    className="w-8 h-8 bg-white/10 hover:bg-[#00ff9d]/20 border border-white/20 hover:border-[#00ff9d]/50 rounded-lg text-white text-sm font-bold transition-all flex items-center justify-center">▼</button>
+                  <div />
+                </div>
+                <div className="text-[9px] font-mono text-white/40 text-center">
+                  {editingPos.lat.toFixed(5)}°N &nbsp; {editingPos.lng.toFixed(5)}°E
+                </div>
+                <div className="text-[8px] text-white/30 text-center">Click map to teleport · Arrows to nudge · Shift for ×5</div>
+                <div className="flex gap-2 w-full">
+                  <button onClick={confirmWaypointMove}
+                    className="flex-1 h-8 bg-[#00ff9d] hover:bg-[#00ff9d]/80 text-black text-[10px] font-black uppercase tracking-widest rounded-lg transition-all shadow-lg shadow-[#00ff9d]/30">
+                    ✓ Confirm
+                  </button>
+                  <button onClick={cancelWaypointMove}
+                    className="flex-1 h-8 bg-white/10 hover:bg-red-500/20 border border-white/20 hover:border-red-500/50 text-white text-[10px] font-bold uppercase tracking-widest rounded-lg transition-all">
+                    ✕ Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Floating Controls & Right Side Panels */}
         <div className="absolute top-4 right-4 z-[1000] flex flex-col gap-3 w-72 max-h-[calc(100vh-8rem)]">

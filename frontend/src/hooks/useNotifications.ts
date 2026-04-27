@@ -42,25 +42,44 @@ export function useNotifications() {
   }, []);
 
   const markAllAsRead = useCallback(() => {
+    // Mark every notification as read in the global store
     globalNotifications = globalNotifications.map(n => ({ ...n, read: true }));
+    // Force React to pick up the new reference
     setNotifications([...globalNotifications]);
   }, []);
+
 
   useEffect(() => {
     if (!sensorData) return;
 
     // Thruster Checks
-    const maxRpm = sensorData.thruster.maxRpm ?? 2000;
-    if (sensorData.thruster.rpm > maxRpm * 0.9) {
-      addNotification(`Thruster RPM at critical level (${sensorData.thruster.rpm.toFixed(0)} rpm)`, 'high', 'thruster');
-    }
-    
-    const maxTemp = sensorData.thruster.tempWarningThreshold ?? 80;
-    if (sensorData.thruster.temperature > maxTemp) {
-      addNotification(`Thruster temperature critical: ${sensorData.thruster.temperature.toFixed(1)}°C`, 'high', 'thruster');
-    } else if (sensorData.thruster.temperature > maxTemp * 0.8) {
-      addNotification(`Thruster temperature elevated: ${sensorData.thruster.temperature.toFixed(1)}°C`, 'medium', 'thruster');
-    }
+    const thrusters = sensorData.thruster.thrusters || [sensorData.thruster];
+    thrusters.forEach((t: any) => {
+      const name = t.name || 'Main';
+      const maxRpm = t.maxRpm ?? 2000;
+      if (t.rpm > maxRpm * 0.9) {
+        addNotification(`${name} Thruster RPM at critical level (${t.rpm.toFixed(0)} rpm)`, 'high', 'thruster');
+      }
+      
+      const maxTemp = t.tempWarningThreshold ?? 80;
+      if (t.temperature > maxTemp) {
+        addNotification(`${name} Thruster temperature critical: ${t.temperature.toFixed(1)}°C`, 'high', 'thruster');
+      } else if (t.temperature > maxTemp * 0.8) {
+        addNotification(`${name} Thruster temperature elevated: ${t.temperature.toFixed(1)}°C`, 'medium', 'thruster');
+      }
+      
+      if (t.status === 'inactive' || t.status === 'idle') {
+        // addNotification(`${name} Thruster is ${t.status}`, 'low', 'thruster');
+      }
+      
+      if (t.vibration > 0.06) {
+        addNotification(`${name} Thruster high vibration: ${t.vibration.toFixed(3)}g`, 'medium', 'thruster');
+      }
+      
+      if (t.efficiency < 75 && t.rpm > 500) {
+        addNotification(`${name} Thruster efficiency low: ${t.efficiency.toFixed(1)}%`, 'medium', 'thruster');
+      }
+    });
 
     // GNSS Checks
     if ((sensorData.gnss.hdop ?? 0) > 3) {

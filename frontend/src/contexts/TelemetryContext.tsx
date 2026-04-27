@@ -58,6 +58,14 @@ export interface SensorData {
     maxRpm?: number;
     tempWarningThreshold?: number;
     status: SensorStatus;
+    // Multi-thruster array from simulator
+    thrusters?: Array<{
+      id: string; name: string; rpm: number; power: number; temperature: number;
+      thrust: number; voltage: number; current: number; currentDraw: number;
+      vibration: number; fuelFlow: number; torque: number; powerConsumption: number;
+      efficiency: number; runtimeHours: number; runtimeMinutes: number;
+      maxRpm: number; tempWarningThreshold: number; status: string;
+    }>;
   };
   radar: {
     rotationAngle: number;
@@ -209,17 +217,17 @@ export function useLiveTelemetry() {
               },
               ctd: {
                 ...prev.ctd,
-                depth: state.ctd?.depth !== undefined ? prev.ctd.depth + (state.ctd.depth - prev.ctd.depth) * 0.015 : prev.ctd.depth,
-                temperature: state.ctd?.temperature ?? prev.ctd.temperature,
-                salinity: state.ctd?.salinity ?? prev.ctd.salinity,
-                conductivity: state.ctd?.conductivity ?? prev.ctd.conductivity,
-                pressure: state.ctd?.pressure ?? prev.ctd.pressure,
-                density: state.ctd?.density ?? prev.ctd.density,
-                soundVelocity: state.ctd?.soundVelocity ?? prev.ctd.soundVelocity,
-                turbidity: state.ctd?.turbidity ?? prev.ctd.turbidity,
-                dissolvedOxygen: state.ctd?.dissolvedOxygen ?? prev.ctd.dissolvedOxygen,
-                fluorescence: state.ctd?.fluorescence ?? prev.ctd.fluorescence,
-                pH: state.ctd?.pH ?? prev.ctd.pH,
+                depth: state.ctd?.depth !== undefined ? prev.ctd.depth + (state.ctd.depth - prev.ctd.depth) * 0.3 : prev.ctd.depth,
+                temperature: state.ctd?.temperature !== undefined ? +state.ctd.temperature : prev.ctd.temperature,
+                salinity: state.ctd?.salinity !== undefined ? +state.ctd.salinity : prev.ctd.salinity,
+                conductivity: state.ctd?.conductivity !== undefined ? +state.ctd.conductivity : prev.ctd.conductivity,
+                pressure: state.ctd?.pressure !== undefined ? +state.ctd.pressure : prev.ctd.pressure,
+                density: state.ctd?.density !== undefined ? +state.ctd.density : prev.ctd.density,
+                soundVelocity: state.ctd?.soundVelocity !== undefined ? +state.ctd.soundVelocity : prev.ctd.soundVelocity,
+                turbidity: state.ctd?.turbidity !== undefined ? +state.ctd.turbidity : prev.ctd.turbidity,
+                dissolvedOxygen: state.ctd?.dissolvedOxygen !== undefined ? +state.ctd.dissolvedOxygen : prev.ctd.dissolvedOxygen,
+                fluorescence: state.ctd?.fluorescence !== undefined ? +state.ctd.fluorescence : prev.ctd.fluorescence,
+                pH: state.ctd?.pH !== undefined ? +state.ctd.pH : prev.ctd.pH,
                 status: state.ctd?.status?.toLowerCase() as any ?? (state.ctd?.depth !== undefined ? 'active' : prev.ctd.status),
               },
               currentMeter: {
@@ -254,20 +262,73 @@ export function useLiveTelemetry() {
                 maxRpm: state.thruster?.maxRpm ?? prev.thruster.maxRpm,
                 tempWarningThreshold: state.thruster?.tempWarningThreshold ?? prev.thruster.tempWarningThreshold,
                 status: state.thruster?.status?.toLowerCase() as any ?? (state.thruster?.rpm !== undefined ? 'active' : prev.thruster.status),
+                // Pass through the full thrusters array for the multi-thruster dashboard
+                thrusters: state.thruster?.thrusters ?? prev.thruster.thrusters,
               },
-              radar: {
-                ...prev.radar,
-                rotationAngle: state.radar?.rotationAngle ?? prev.radar.rotationAngle,
-                targets: state.radar?.targets || prev.radar.targets,
-                oasSensors: state.radar?.oasSensors || prev.radar.oasSensors,
-                suggestedManeuver: state.radar?.suggestedManeuver !== undefined ? state.radar.suggestedManeuver : prev.radar.suggestedManeuver,
-                range: state.radar?.range ?? prev.radar.range,
-                config: state.radar?.config ?? prev.radar.config,
-                performance: state.radar?.performance ?? prev.radar.performance,
-                statistics: state.radar?.statistics ?? prev.radar.statistics,
-                detections: state.radar?.detections || prev.radar.detections,
-                status: state.radar?.status === 'SCANNING' ? 'active' : (state.radar?.status?.toLowerCase() as any || prev.radar.status),
-              }
+              radar: (() => {
+                if (!state.radar) return prev.radar;
+                const α = 0.3; // EMA factor for numeric fields
+
+                // ── Advanced Target Persistence Layer ─────────────────────────
+                // We maintain a persistent registry by ID. If a target is missing from the 
+                // current packet, we keep it for up to 1500ms to prevent flickering.
+                const NOW = Date.now();
+                const TARGET_TTL_MS = 1500;
+                
+                const combinedMap = new Map();
+                
+                // 1. Seed with existing targets (those that haven't expired)
+                prev.radar.targets.forEach((t: any) => {
+                  if (NOW - (t._lastSeen || NOW) < TARGET_TTL_MS) {
+                    combinedMap.set(t.id, { ...t, _active: false }); // Mark as potentially stale
+                  }
+                });
+
+                // 2. Overlay new targets from current packet
+                const incoming = state.radar.targets || [];
+                incoming.forEach((t: any) => {
+                  const p = combinedMap.get(t.id);
+                  if (!p) {
+                    // New target
+                    combinedMap.set(t.id, { ...t, _lastSeen: NOW, _active: true });
+                  } else {
+                    // Update and smooth existing target
+                    combinedMap.set(t.id, {
+                      ...t,
+                      _lastSeen: NOW,
+                      _active: true,
+                      // EMA Smoothing
+                      rangem: p.rangem + (t.rangem - p.rangem) * α,
+                      cpa:    p.cpa    + (t.cpa    - p.cpa)    * α,
+                      tcpa:   p.tcpa   + (t.tcpa   - p.tcpa)   * α,
+                      cri:    p.cri    + (t.cri    - p.cri)    * α,
+                      absoluteBearingDeg: p.absoluteBearingDeg + (t.absoluteBearingDeg - p.absoluteBearingDeg) * α,
+                      bearingDeg:         p.bearingDeg + (t.bearingDeg - p.bearingDeg) * α,
+                    });
+                  }
+                });
+
+                const mergedTargets = Array.from(combinedMap.values());
+
+                return {
+                  ...prev.radar,
+                  rotationAngle: state.radar.rotationAngle ?? prev.radar.rotationAngle,
+                  targets: mergedTargets,
+                  detections: state.radar.detections || prev.radar.detections,
+                  oasSensors: state.radar.oasSensors || prev.radar.oasSensors,
+                  // Only update maneuver if it actually changes — prevents banner flash
+                  suggestedManeuver: state.radar.suggestedManeuver !== undefined
+                    ? state.radar.suggestedManeuver
+                    : prev.radar.suggestedManeuver,
+                  range: state.radar.range ?? prev.radar.range,
+                  config: state.radar.config ?? prev.radar.config,
+                  performance: state.radar.performance ?? prev.radar.performance,
+                  statistics: state.radar.statistics ?? prev.radar.statistics,
+                  status: state.radar.status === 'SCANNING' ? 'active'
+                    : (state.radar.status?.toLowerCase() as any || prev.radar.status),
+                };
+              })()
+
             };
             
             const nowTime = Date.now();

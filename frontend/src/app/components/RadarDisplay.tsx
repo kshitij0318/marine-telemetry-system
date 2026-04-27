@@ -4,27 +4,32 @@ import { useTheme } from '../../contexts/ThemeContext';
 interface Detection {
   distance: number;
   angle: number;
-  threat: 'low' | 'medium' | 'high';
+  threat: 'low' | 'medium' | 'high' | 'critical';
 }
 
 interface RadarDisplayProps {
-  detections: Detection[];
+  detections?: Detection[];
+  targets?: any[];
   range: number;
   size?: number;
+  rotationAngle?: number;
 }
 
 export const RadarDisplay: React.FC<RadarDisplayProps> = ({ 
-  detections, 
+  detections = [], 
+  targets = [],
   range, 
-  size = 300 
+  size = 300,
+  rotationAngle = 0
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { theme } = useTheme();
   
-  const dataRef = useRef({ detections, range, size, theme });
+  const dataRef = useRef({ detections, targets, range, size, theme, rotationAngle });
+  
   useEffect(() => {
-    dataRef.current = { detections, range, size, theme };
-  }, [detections, range, size, theme]);
+    dataRef.current = { detections, targets, range, size, theme, rotationAngle };
+  }, [detections, targets, range, size, theme, rotationAngle]);
   
   const getThemeColors = (currentTheme: string) => {
     switch (currentTheme) {
@@ -36,6 +41,7 @@ export const RadarDisplay: React.FC<RadarDisplayProps> = ({
           threatLow: '#00ff41',
           threatMedium: '#ffff00',
           threatHigh: '#ff0000',
+          threatCritical: '#ff00ff',
         };
       case 'light':
         return {
@@ -45,6 +51,7 @@ export const RadarDisplay: React.FC<RadarDisplayProps> = ({
           threatLow: '#22c55e',
           threatMedium: '#f59e0b',
           threatHigh: '#ef4444',
+          threatCritical: '#b91c1c',
         };
       case 'marine-dark':
       default:
@@ -55,6 +62,7 @@ export const RadarDisplay: React.FC<RadarDisplayProps> = ({
           threatLow: '#4ade80',
           threatMedium: '#fbbf24',
           threatHigh: '#f87171',
+          threatCritical: '#ef4444',
         };
     }
   };
@@ -67,15 +75,15 @@ export const RadarDisplay: React.FC<RadarDisplayProps> = ({
     if (!ctx) return;
 
     let animationFrameId: number;
-    let sweepAngle = 0;
+    // Internal sweep state for the visual effect
+    let internalSweepAngle = 0;
 
     const drawRadar = () => {
-      const { detections, range, size, theme: currentTheme } = dataRef.current;
+      const { detections, targets, range, size, theme: currentTheme } = dataRef.current;
       const colors = getThemeColors(currentTheme);
       const center = size / 2;
-      const radius = size / 2 - 20; // 20px padding
+      const radius = size / 2 - 20;
 
-      // Clear canvas
       ctx.clearRect(0, 0, size, size);
 
       // Draw background
@@ -101,12 +109,28 @@ export const RadarDisplay: React.FC<RadarDisplayProps> = ({
       ctx.lineTo(center + radius, center);
       ctx.stroke();
 
-      // Draw Detections
-      detections.forEach(detection => {
-        // Convert distance to pixel radius (scale 0-range to 0-radius)
-        const dRadius = (detection.distance / range) * radius;
-        // Adjust angle so 0 is North (top) and degrees increase clockwise
-        const dAngle = (detection.angle - 90) * (Math.PI / 180);
+      // Combine detections and targets for rendering
+      const targetMap = new Map();
+      
+      (detections || []).forEach(d => {
+        if (d.distance !== undefined && d.angle !== undefined) {
+          targetMap.set(d.id || Math.random(), { dist: d.distance, angle: d.angle, threat: d.threat });
+        }
+      });
+      
+      (targets || []).forEach(t => {
+        if (t.id) {
+          targetMap.set(t.id, { dist: t.rangem ?? t.distance, angle: t.bearingDeg ?? t.angle, threat: t.threat });
+        }
+      });
+
+      const renderList = Array.from(targetMap.values());
+
+      renderList.forEach(obj => {
+        const dRadius = (obj.dist / range) * radius;
+        // North is 0, degrees increase clockwise. 
+        // Math.cos/sin starts at East (3 o'clock), so subtract 90 deg.
+        const dAngle = (obj.angle - 90) * (Math.PI / 180);
 
         const x = center + dRadius * Math.cos(dAngle);
         const y = center + dRadius * Math.sin(dAngle);
@@ -114,36 +138,30 @@ export const RadarDisplay: React.FC<RadarDisplayProps> = ({
         ctx.beginPath();
         ctx.arc(x, y, 4, 0, Math.PI * 2);
         
-        switch (detection.threat) {
-          case 'high':
-            ctx.fillStyle = colors.threatHigh;
-            break;
-          case 'medium':
-            ctx.fillStyle = colors.threatMedium;
-            break;
-          case 'low':
-          default:
-            ctx.fillStyle = colors.threatLow;
+        switch (obj.threat) {
+          case 'critical': ctx.fillStyle = colors.threatCritical; break;
+          case 'high': ctx.fillStyle = colors.threatHigh; break;
+          case 'medium': ctx.fillStyle = colors.threatMedium; break;
+          default: ctx.fillStyle = colors.threatLow;
         }
         
         ctx.fill();
-        
-        // Add a glow effect
         ctx.shadowColor = ctx.fillStyle;
         ctx.shadowBlur = 10;
         ctx.fill();
-        ctx.shadowBlur = 0; // reset
+        ctx.shadowBlur = 0;
       });
 
       // Draw Sweep
       ctx.save();
       ctx.translate(center, center);
-      ctx.rotate(sweepAngle);
+      
+      ctx.rotate(internalSweepAngle);
       
       const gradient = ctx.createConicGradient(0, 0, 0);
-      gradient.addColorStop(0, `${colors.sweep}00`); // transparent
-      gradient.addColorStop(0.1, `${colors.sweep}80`); // semi-transparent
-      gradient.addColorStop(0.1, 'transparent'); // sharp cut-off
+      gradient.addColorStop(0, `${colors.sweep}00`);
+      gradient.addColorStop(0.1, `${colors.sweep}80`);
+      gradient.addColorStop(0.1, 'transparent');
       gradient.addColorStop(1, 'transparent');
 
       ctx.beginPath();
@@ -161,8 +179,8 @@ export const RadarDisplay: React.FC<RadarDisplayProps> = ({
 
       ctx.restore();
 
-      // Update sweep angle 1.5 degrees per frame
-      sweepAngle += 1.5 * (Math.PI / 180);
+      // Update sweep angle with smoothing
+      internalSweepAngle += 0.02;
 
       animationFrameId = requestAnimationFrame(drawRadar);
     };
@@ -172,17 +190,15 @@ export const RadarDisplay: React.FC<RadarDisplayProps> = ({
     return () => {
       cancelAnimationFrame(animationFrameId);
     };
-  }, []); // Empty dependencies. Runs forever unconditionally.
+  }, []);
 
   return (
-    // Feature 6: Wrapper enforces 1:1 aspect ratio regardless of container width.
-    // The canvas is rendered at fixed pixel dimensions; no CSS stretch can distort it.
-    <div style={{ width: size, height: size, flexShrink: 0 }}>
+    <div style={{ width: size, height: size, flexShrink: 0 }} className="relative mx-auto">
       <canvas
         ref={canvasRef}
         width={size}
         height={size}
-        className="rounded-full shadow-lg border-2"
+        className="rounded-full shadow-2xl border-4"
         style={{
           display: 'block',
           width: size,
@@ -191,6 +207,12 @@ export const RadarDisplay: React.FC<RadarDisplayProps> = ({
           backgroundColor: getThemeColors(theme).bg,
         }}
       />
+      {/* Center Vessel Icon */}
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+        <div className="w-4 h-6 border-2 border-marine-accent rounded-sm relative">
+           <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 border-t-2 border-l-2 border-marine-accent rotate-45" />
+        </div>
+      </div>
     </div>
   );
 };

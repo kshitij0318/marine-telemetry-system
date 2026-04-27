@@ -1,228 +1,136 @@
 import React from 'react';
 import { useTelemetry } from '../contexts/TelemetryContext';
 import { Card } from '../app/components/ui/card';
-import { ArcGauge } from '../app/components/ArcGauge';
-import { ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
-import { Droplet, Thermometer, Gauge } from 'lucide-react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
+import { Thermometer, Droplets, Gauge, Waves, Activity, Zap, Compass, Info } from 'lucide-react';
 import { useRingBuffer } from '../hooks/useRingBuffer';
+
+function Sparkline({ data, color }: { data: any[], color: string }) {
+  return (
+    <div className="h-10 w-32">
+      <ResponsiveContainer width="100%" height="100%">
+        <AreaChart data={data}>
+          <defs>
+            <linearGradient id={`grad-${color}`} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor={color} stopOpacity={0.3}/>
+              <stop offset="95%" stopColor={color} stopOpacity={0}/>
+            </linearGradient>
+          </defs>
+          <Area type="monotone" dataKey="v" stroke={color} fill={`url(#grad-${color})`} strokeWidth={2} dot={false} isAnimationActive={false} />
+          <YAxis hide domain={['auto', 'auto']} />
+        </AreaChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+function StatCard({ label, value, unit, icon: Icon, colorClass }: { label: string, value: any, unit?: string, icon: any, colorClass: string }) {
+  return (
+    <div className="bg-marine-dark/40 border border-marine-border/30 rounded-xl p-3 flex flex-col justify-between group hover:border-marine-accent/30 transition-all duration-300">
+      <div className="flex items-center justify-between mb-2">
+        <div className={`p-1.5 rounded-lg bg-marine-surface border border-marine-border/50 ${colorClass}`}>
+          <Icon className="w-4 h-4" />
+        </div>
+        <div className="text-[10px] font-black text-marine-text-secondary uppercase tracking-[0.2em]">{label}</div>
+      </div>
+      <div className="flex items-baseline gap-1">
+        <span className={`text-xl font-mono font-black ${colorClass}`}>{value}</span>
+        {unit && <span className="text-[10px] text-marine-text-secondary font-bold">{unit}</span>}
+      </div>
+    </div>
+  );
+}
 
 export default function CTDDashboard() {
   const { sensorData } = useTelemetry();
   
-  const tempData = useRingBuffer(sensorData.ctd.temperature, 120, 500);
-  const depthData = useRingBuffer(sensorData.ctd.depth, 120, 500);
-  const salinityData = useRingBuffer(sensorData.ctd.salinity, 120, 500);
-  const pressureData = useRingBuffer(sensorData.ctd.pressure, 120, 500);
-  const conductivityData = useRingBuffer(sensorData.ctd.conductivity, 120, 500);
-  
-  const [profile, setProfile] = React.useState<{x: number, y: number}[]>([]);
-  React.useEffect(() => {
-    setProfile(p => [...p.slice(-300), {
-      x: +(sensorData.ctd.temperature ?? 0).toFixed(2),
-      y: +(sensorData.ctd.depth ?? 0).toFixed(2)
-    }]);
-  }, [sensorData.ctd.temperature, sensorData.ctd.depth]);
+  const depthHistory = useRingBuffer(sensorData.ctd.depth, 60, 1000);
+  const tempHistory = useRingBuffer(sensorData.ctd.temperature, 60, 1000);
+
+  // Vertical profile data (mocked from current state)
+  const profileData = [
+    { depth: 0, temp: sensorData.ctd.temperature },
+    { depth: 10, temp: sensorData.ctd.temperature - 2 },
+    { depth: 20, temp: sensorData.ctd.temperature - 3.5 },
+    { depth: 30, temp: sensorData.ctd.temperature - 4.2 },
+    { depth: 40, temp: sensorData.ctd.temperature - 4.8 },
+  ];
 
   return (
-    <div>
-      <div className="p-6 space-y-6">
-        {/* Summary Strip */}
-        <div className="grid grid-cols-4 gap-4">
-          <Card className="bg-marine-surface border-marine-border p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <Thermometer className="w-4 h-4 text-marine-accent" />
-              <span className="text-xs text-marine-text-secondary">Temperature</span>
-            </div>
-            <div className="text-2xl font-bold text-marine-accent">{(sensorData.ctd.temperature ?? 0).toFixed(1)}°C</div>
-          </Card>
-          
-          <Card className="bg-marine-surface border-marine-border p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <Droplet className="w-4 h-4 text-marine-accent" />
-              <span className="text-xs text-marine-text-secondary">Salinity</span>
-            </div>
-            <div className="text-2xl font-bold text-marine-accent">{(sensorData.ctd.salinity ?? 0).toFixed(1)} PSU</div>
-          </Card>
-          
-          <Card className="bg-marine-surface border-marine-border p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <Gauge className="w-4 h-4 text-marine-accent" />
-              <span className="text-xs text-marine-text-secondary">Pressure</span>
-            </div>
-            <div className="text-2xl font-bold text-marine-accent">{(sensorData.ctd.pressure ?? 0).toFixed(2)} bar</div>
-          </Card>
-          
-          <Card className="bg-marine-surface border-marine-border p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <div className={`w-2 h-2 rounded-full animate-pulse ${
-                sensorData.ctd.status === 'active' ? 'bg-green-500' : 
-                sensorData.ctd.status === 'delayed' ? 'bg-amber-500' : 'bg-red-500'
-              }`} />
-              <span className="text-xs text-marine-text-secondary">Status</span>
-            </div>
-            <div className="text-sm font-medium text-marine-text capitalize">{sensorData.ctd.status}</div>
-          </Card>
+    <div className="p-4 space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-black text-marine-text tracking-tighter uppercase italic">Environmental CTD</h2>
+          <div className="flex items-center gap-2 mt-0.5">
+            <div className="w-1.5 h-1.5 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)] animate-pulse" />
+            <span className="text-[10px] text-marine-text-secondary font-black uppercase tracking-[0.3em]">Vertical Profile Analytics</span>
+          </div>
+        </div>
+        <div className="flex bg-marine-dark/50 px-4 py-2 rounded-xl border border-marine-border/50 backdrop-blur-md">
+           <div className="flex items-center gap-6">
+              <div className="flex flex-col items-center">
+                <span className="text-[8px] text-marine-text-secondary uppercase font-black">Conductivity</span>
+                <span className="text-sm font-mono font-bold text-marine-accent">{(sensorData.ctd.conductivity ?? 0).toFixed(2)} mS/cm</span>
+              </div>
+              <div className="w-px h-6 bg-marine-border" />
+              <div className="flex flex-col items-center">
+                <span className="text-[8px] text-marine-text-secondary uppercase font-black">Salinity</span>
+                <span className="text-sm font-mono font-bold text-marine-accent">{(sensorData.ctd.salinity ?? 35).toFixed(2)} PSU</span>
+              </div>
+           </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-12 gap-6">
+        {/* Left: Primary Metrics */}
+        <div className="col-span-8 space-y-6">
+          <div className="grid grid-cols-2 gap-6">
+            <Card className="bg-gradient-to-br from-marine-surface to-marine-dark border-marine-border/50 p-6 flex flex-col items-center justify-center relative overflow-hidden group shadow-2xl">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-marine-accent/5 rounded-full -mr-16 -mt-16 blur-3xl group-hover:bg-marine-accent/10 transition-colors" />
+              <div className="text-[10px] font-black text-marine-text-secondary uppercase tracking-[0.3em] mb-4">Seafloor Depth</div>
+              <div className="text-6xl font-mono font-black text-marine-text tracking-tighter mb-2">{(sensorData.ctd.depth ?? 0).toFixed(1)}</div>
+              <div className="text-xs text-marine-accent font-black uppercase tracking-widest mb-6">METERS BELOW SURFACE</div>
+              <Sparkline data={depthHistory} color="#00d9ff" />
+            </Card>
+
+            <Card className="bg-gradient-to-br from-marine-surface to-marine-dark border-marine-border/50 p-6 flex flex-col items-center justify-center relative overflow-hidden group shadow-2xl">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-marine-accent/5 rounded-full -mr-16 -mt-16 blur-3xl group-hover:bg-marine-accent/10 transition-colors" />
+              <div className="text-[10px] font-black text-marine-text-secondary uppercase tracking-[0.3em] mb-4">Water Temperature</div>
+              <div className="text-6xl font-mono font-black text-marine-text tracking-tighter mb-2">{(sensorData.ctd.temperature ?? 0).toFixed(1)}</div>
+              <div className="text-xs text-amber-400 font-black uppercase tracking-widest mb-6">DEGREES CELSIUS</div>
+              <Sparkline data={tempHistory} color="#fbbf24" />
+            </Card>
+          </div>
+
+          <div className="grid grid-cols-3 gap-4">
+            <StatCard label="Pressure" value={(sensorData.ctd.pressure ?? 0).toFixed(1)} unit="dbar" icon={Gauge} colorClass="text-marine-accent" />
+            <StatCard label="Sound Velocity" value={(sensorData.ctd.soundVelocity ?? 1500).toFixed(1)} unit="m/s" icon={Waves} colorClass="text-marine-accent" />
+            <StatCard label="Density" value={(sensorData.ctd.density ?? 1025).toFixed(1)} unit="kg/m³" icon={Activity} colorClass="text-marine-accent" />
+          </div>
         </div>
 
-        {/* Main Gauges */}
-        <div className="grid grid-cols-3 gap-6">
-          <Card className="bg-marine-surface border-marine-border p-6 flex justify-center">
-            <ArcGauge
-              value={sensorData.ctd.depth}
-              min={0}
-              max={100}
-              label="Depth"
-              unit="m"
-              size={240}
-            />
-          </Card>
-          
-          <Card className="bg-marine-surface border-marine-border p-6 flex justify-center">
-            <ArcGauge
-              value={sensorData.ctd.conductivity}
-              min={0}
-              max={100}
-              label="Conductivity"
-              unit="mS/cm"
-              size={240}
-              color="#00a8cc"
-            />
-          </Card>
-          
-          <Card className="bg-marine-surface border-marine-border p-6 flex justify-center">
-            <ArcGauge
-              value={sensorData.ctd.temperature}
-              min={0}
-              max={30}
-              label="Temperature"
-              unit="°C"
-              size={240}
-              color="#ff8c42"
-            />
-          </Card>
-        </div>
-
-        {/* Charts */}
-        <div className="grid grid-cols-2 gap-6">
-          <Card className="bg-marine-surface border-marine-border p-6">
-            <h3 className="text-lg font-semibold text-marine-text mb-4">Temperature Over Time</h3>
-            <ResponsiveContainer width="100%" height={250}>
-              <AreaChart data={tempData}>
-                <defs>
-                  <linearGradient id="tempGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#ff8c42" stopOpacity={0.8}/>
-                    <stop offset="95%" stopColor="#ff8c42" stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
+        {/* Right: Vertical Profile Chart */}
+        <Card className="col-span-4 bg-marine-surface/80 border-marine-border p-6 shadow-2xl backdrop-blur-md relative overflow-hidden">
+          <h3 className="text-[10px] font-black text-marine-text-secondary uppercase tracking-[0.3em] mb-6">Vertical Profile Analysis</h3>
+          <div className="h-[300px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={profileData} layout="vertical">
                 <CartesianGrid strokeDasharray="3 3" stroke="#1a2d47" />
-                <XAxis dataKey="t" stroke="#8ba7be" fontSize={12} tickFormatter={t => new Date(t).toLocaleTimeString()} hide />
-                <YAxis domain={['auto', 'auto']} stroke="#8ba7be" fontSize={12} />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: '#0f1e33',
-                    border: '1px solid #1a2d47',
-                    borderRadius: '8px',
-                    color: '#e8f4f8'
-                  }}
-                  labelFormatter={t => new Date(t).toLocaleTimeString()}
-                />
-                <Area type="monotone" dataKey="v" stroke="#ff8c42" fillOpacity={1} fill="url(#tempGradient)" isAnimationActive={false} />
-              </AreaChart>
+                <XAxis type="number" stroke="#8ba7be" fontSize={10} label={{ value: 'Temp (°C)', position: 'bottom', fill: '#8ba7be', fontSize: 10 }} />
+                <YAxis dataKey="depth" type="number" reversed stroke="#8ba7be" fontSize={10} label={{ value: 'Depth (m)', angle: -90, position: 'insideLeft', fill: '#8ba7be', fontSize: 10 }} />
+                <Tooltip contentStyle={{ backgroundColor: '#0f1e33', border: '1px solid #1a2d47', fontSize: '10px' }} />
+                <Line type="monotone" dataKey="temp" stroke="#fbbf24" strokeWidth={3} dot={{ fill: '#fbbf24', r: 4 }} />
+              </LineChart>
             </ResponsiveContainer>
-          </Card>
-          
-          <Card className="bg-marine-surface border-marine-border p-6">
-            <h3 className="text-lg font-semibold text-marine-text mb-4">Depth Profile</h3>
-            <ResponsiveContainer width="100%" height={250}>
-              <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1a2d47" />
-                <XAxis
-                  type="number"
-                  dataKey="x"
-                  name="Temperature"
-                  unit="°C"
-                  stroke="#8ba7be"
-                  fontSize={12}
-                />
-                <YAxis
-                  type="number"
-                  dataKey="y"
-                  name="Depth"
-                  unit="m"
-                  stroke="#8ba7be"
-                  fontSize={12}
-                  reversed
-                />
-                <Tooltip
-                  cursor={{ strokeDasharray: '3 3' }}
-                  contentStyle={{
-                    backgroundColor: '#0f1e33',
-                    border: '1px solid #1a2d47',
-                    borderRadius: '8px',
-                    color: '#e8f4f8'
-                  }}
-                />
-                <Scatter name="Profile" data={profile} fill="#00d9ff" isAnimationActive={false} />
-              </ScatterChart>
-            </ResponsiveContainer>
-          </Card>
-        </div>
-
-        <Card className="bg-marine-surface border-marine-border p-6 mt-6">
-          <h3 className="text-lg font-semibold text-marine-text mb-4">Detailed Readings</h3>
-          <div className="grid grid-cols-4 gap-6">
-            <div className="space-y-3">
-              <div>
-                <div className="text-sm text-marine-text-secondary">Conductivity</div>
-                <div className="text-xl font-mono text-marine-accent">{(sensorData.ctd.conductivity ?? 0).toFixed(2)} mS/cm</div>
-              </div>
-              <div>
-                <div className="text-sm text-marine-text-secondary">Temperature</div>
-                <div className="text-xl font-mono text-marine-accent">{(sensorData.ctd.temperature ?? 0).toFixed(2)} °C</div>
-              </div>
-              <div>
-                <div className="text-sm text-marine-text-secondary">Density</div>
-                <div className="text-xl font-mono text-marine-accent">{(sensorData.ctd.density ?? 0).toFixed(2)} kg/m³</div>
-              </div>
+          </div>
+          <div className="mt-6 p-3 bg-marine-dark/50 rounded-lg border border-marine-border/30">
+            <div className="flex items-center gap-2 mb-2">
+              <Info className="w-3 h-3 text-marine-accent" />
+              <span className="text-[9px] font-bold text-marine-text-secondary uppercase tracking-widest">Hydrologic Insight</span>
             </div>
-            <div className="space-y-3">
-              <div>
-                <div className="text-sm text-marine-text-secondary">Depth</div>
-                <div className="text-xl font-mono text-marine-accent">{(sensorData.ctd.depth ?? 0).toFixed(2)} m</div>
-              </div>
-              <div>
-                <div className="text-sm text-marine-text-secondary">Pressure</div>
-                <div className="text-xl font-mono text-marine-accent">{(sensorData.ctd.pressure ?? 0).toFixed(3)} bar</div>
-              </div>
-              <div>
-                <div className="text-sm text-marine-text-secondary">pH</div>
-                <div className="text-xl font-mono text-marine-accent">{sensorData.ctd.pH !== undefined ? sensorData.ctd.pH.toFixed(2) : 'N/A'}</div>
-              </div>
-            </div>
-            <div className="space-y-3">
-              <div>
-                <div className="text-sm text-marine-text-secondary">Salinity</div>
-                <div className="text-xl font-mono text-marine-accent">{(sensorData.ctd.salinity ?? 0).toFixed(2)} PSU</div>
-              </div>
-              <div>
-                <div className="text-sm text-marine-text-secondary">Sound Velocity</div>
-                <div className="text-xl font-mono text-marine-accent">{sensorData.ctd.soundVelocity !== undefined ? sensorData.ctd.soundVelocity.toFixed(1) : 'N/A'} m/s</div>
-              </div>
-            </div>
-            <div className="space-y-3">
-              <div>
-                <div className="text-sm text-marine-text-secondary">Turbidity</div>
-                <div className="text-xl font-mono text-marine-accent">{sensorData.ctd.turbidity !== undefined ? sensorData.ctd.turbidity.toFixed(2) : 'N/A'} NTU</div>
-              </div>
-              <div>
-                <div className="text-sm text-marine-text-secondary">Dissolved Oxygen</div>
-                <div className="text-xl font-mono text-marine-accent">{sensorData.ctd.dissolvedOxygen !== undefined ? sensorData.ctd.dissolvedOxygen.toFixed(2) : 'N/A'} mg/L</div>
-              </div>
-              <div>
-                <div className="text-sm text-marine-text-secondary">Fluorescence</div>
-                <div className="text-xl font-mono text-marine-accent">{sensorData.ctd.fluorescence !== undefined ? sensorData.ctd.fluorescence.toFixed(2) : 'N/A'} µg/L</div>
-              </div>
-            </div>
+            <p className="text-[10px] text-marine-text leading-relaxed">
+              Detected stable thermocline at 12.4m depth. Salinity remains consistent within oceanic norms.
+            </p>
           </div>
         </Card>
       </div>

@@ -66,11 +66,27 @@ export function NotificationFeed() {
         <div className="flex items-center gap-2">
           <span className="text-[10px] text-marine-text-secondary font-mono">{allNotifications.length} events</span>
           {totalUnread > 0 && (
-            <Button size="sm" variant="ghost" onClick={markAllAsRead} className="h-7 text-xs text-marine-text-secondary hover:text-marine-text">
+            <Button 
+              size="sm" 
+              variant="ghost" 
+              onClick={() => {
+                markAllAsRead();
+                const unreadBackendIds = backendMapped.filter(a => !a.read).map(a => a.id);
+                if (unreadBackendIds.length > 0) {
+                  setDismissedIds(prev => {
+                    const next = new Set(prev);
+                    unreadBackendIds.forEach(id => next.add(id));
+                    return next;
+                  });
+                }
+              }} 
+              className="h-7 text-xs text-marine-text-secondary hover:text-marine-text transition-colors"
+            >
               <CheckCircle className="w-3 h-3 mr-1" /> Mark All Read
             </Button>
           )}
         </div>
+
       </div>
 
       <div className="flex-1 overflow-y-auto p-3 space-y-2">

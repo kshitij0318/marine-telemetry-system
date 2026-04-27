@@ -61,43 +61,49 @@ export default function FleetOverview() {
   }, []);
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-4 space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-marine-text">Fleet Overview</h2>
-          <p className="text-marine-text-secondary mt-1">Monitor all vessels in your fleet</p>
+          <h2 className="text-xl font-bold text-marine-text tracking-tight">Fleet Overview</h2>
+          <p className="text-xs text-marine-text-secondary">Monitor all vessels in your fleet</p>
         </div>
-        <div className="flex items-center gap-4">
-          <Card className="bg-marine-surface border-marine-border p-4">
-            <div className="flex items-center gap-2">
-              <Ship className="w-5 h-5 text-marine-accent" />
+        <div className="flex items-center gap-3">
+          <Card className="bg-marine-surface border-marine-border p-3">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-marine-accent/10 rounded-lg">
+                <Ship className="w-4 h-4 text-marine-accent" />
+              </div>
               <div>
-                <div className="text-2xl font-bold text-marine-accent">{vessels.length}</div>
-                <div className="text-xs text-marine-text-secondary">Total Vessels</div>
+                <div className="text-xl font-bold text-marine-accent leading-none">{vessels.length}</div>
+                <div className="text-[10px] text-marine-text-secondary uppercase mt-1 tracking-wider">Total</div>
               </div>
             </div>
           </Card>
-          <Card className="bg-marine-surface border-marine-border p-4">
-            <div className="flex items-center gap-2">
-              <Activity className="w-5 h-5 text-green-400" />
+          <Card className="bg-marine-surface border-marine-border p-3">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-green-500/10 rounded-lg">
+                <Activity className="w-4 h-4 text-green-400" />
+              </div>
               <div>
-                <div className="text-2xl font-bold text-green-400">
+                <div className="text-xl font-bold text-green-400 leading-none">
                   {vessels.filter(v => v.status === 'active').length}
                 </div>
-                <div className="text-xs text-marine-text-secondary">Active</div>
+                <div className="text-[10px] text-marine-text-secondary uppercase mt-1 tracking-wider">Active</div>
               </div>
             </div>
           </Card>
         </div>
       </div>
 
+
       {/* Vessel Cards */}
-      <div className="grid grid-cols-1 gap-6">
+      <div className="grid grid-cols-1 gap-4">
         {vessels.map((vessel) => (
-          <Card key={vessel.id} className="bg-marine-surface border-marine-border p-6 hover:border-marine-accent transition-colors">
-            <div className="flex items-start justify-between mb-4">
+          <Card key={vessel.id} className="bg-marine-surface border-marine-border p-4 hover:border-marine-accent transition-all duration-300">
+            <div className="flex items-start justify-between mb-3">
               <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-marine-accent/10 rounded-lg flex items-center justify-center">
+                <div className="w-10 h-10 bg-marine-accent/10 rounded-lg flex items-center justify-center border border-marine-accent/20">
+
                   <Ship className="w-6 h-6 text-marine-accent" />
                 </div>
                 <div>

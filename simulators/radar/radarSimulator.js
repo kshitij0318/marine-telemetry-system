@@ -133,6 +133,12 @@ module.exports = {
     let tickCount = 0;
     let lastSimTime = Date.now();
     let totalDetections = 0;
+    
+    const oasStats = {
+      maxRange: 0,
+      avgRange: 0,
+      sessionSeconds: 0
+    };
 
     // Deep copy targets to allow independent updates
     const activeTargets = JSON.parse(JSON.stringify(WORLD_TARGETS));
@@ -163,7 +169,17 @@ module.exports = {
       // Radar processing logic
       activeTargets.forEach(t => {
         const dist = calculateDistance(state.lat, state.lng, t.lat, t.lng);
-        if (dist > RADAR_CONFIG.operatingRange) return;
+        
+        // Range Hysteresis: prevent flickering at the 3000m edge
+        const inRangePrev = t._smooth?.inRange ?? false;
+        const inRange = inRangePrev 
+          ? dist < RADAR_CONFIG.operatingRange + 50 // Buffer to keep
+          : dist < RADAR_CONFIG.operatingRange;      // Threshold to enter
+          
+        if (!inRange) {
+          if (t._smooth) t._smooth.inRange = false;
+          return;
+        }
 
         const absBrg = calculateBearing(state.lat, state.lng, t.lat, t.lng);
         const relBrg = ((absBrg - state.heading + 360) % 360);
@@ -172,27 +188,48 @@ module.exports = {
 
         // Collision Risk Index (0 to 1)
         // High risk if CPA < 200m and TCPA < 180s
-        let cri = 0;
+        let rawCri = 0;
         if (cpa < 500 && tcpa < 300 && tcpa > 0) {
-           cri = Math.max(0, 1 - (cpa / 500) * 0.5 - (tcpa / 300) * 0.5);
+           rawCri = Math.max(0, 1 - (cpa / 500) * 0.5 - (tcpa / 300) * 0.5);
         }
 
-        let threat = 'low';
-        if (cri > 0.7) {
-          threat = 'critical';
-          highThreats++;
-        } else if (cri > 0.4 || (dist < 200)) {
-          threat = 'high';
-          highThreats++;
-        } else if (cri > 0.1 || (dist < 500)) {
-          threat = 'medium';
-          medThreats++;
-        } else {
-          lowThreats++;
+        // ── EMA smoothing per target ─────────────────────────────────────
+        // Keep a smooth state per target ID to prevent flickering
+        if (!t._smooth) {
+          t._smooth = { cri: rawCri, cpa, tcpa, dist, threat: 'low', threatTicks: 0, inRange: true };
         }
+        const α = 0.15; // smoothing factor — higher = more responsive
+        t._smooth.cri  = t._smooth.cri  * (1 - α) + rawCri * α;
+        t._smooth.cpa  = t._smooth.cpa  * (1 - α) + cpa    * α;
+        t._smooth.tcpa = t._smooth.tcpa * (1 - α) + tcpa   * α;
+        t._smooth.dist = t._smooth.dist * (1 - α) + dist   * α;
 
-        if (cri > highestRiskScore && threat !== 'low') {
-          highestRiskScore = cri;
+        const sCri  = t._smooth.cri;
+        const sCpa  = t._smooth.cpa;
+        const sDist = t._smooth.dist;
+
+        // ── Hysteresis threat classification ────────────────────────────
+        // Thresholds have a "deadband" — must cross a higher threshold to
+        // upgrade and a lower one to downgrade. Prevents rapid toggling.
+        const prevThreat = t._smooth.threat;
+        let threat;
+        if (prevThreat === 'critical') {
+          threat = sCri > 0.55 ? 'critical' : sCri > 0.3 ? 'high' : 'medium';
+        } else if (prevThreat === 'high') {
+          threat = sCri > 0.7 ? 'critical' : sCri > 0.3 || sDist < 250 ? 'high' : sCri > 0.08 || sDist < 550 ? 'medium' : 'low';
+        } else if (prevThreat === 'medium') {
+          threat = sCri > 0.7 ? 'critical' : sCri > 0.45 || sDist < 180 ? 'high' : sCri > 0.08 || sDist < 550 ? 'medium' : 'low';
+        } else { // low
+          threat = sCri > 0.7 ? 'critical' : sCri > 0.45 || sDist < 200 ? 'high' : sCri > 0.12 || sDist < 500 ? 'medium' : 'low';
+        }
+        t._smooth.threat = threat;
+
+        if (threat === 'critical' || threat === 'high') highThreats++;
+        else if (threat === 'medium') medThreats++;
+        else lowThreats++;
+
+        if (sCri > highestRiskScore && threat !== 'low') {
+          highestRiskScore = sCri;
           recommendedManeuver = getColregsAdvice(state.heading, absBrg, threat);
         }
 
@@ -203,17 +240,30 @@ module.exports = {
           worldLng: +t.lng.toFixed(6),
           absoluteBearingDeg: +absBrg.toFixed(1),
           bearingDeg: +relBrg.toFixed(1),
-          rangem: +dist.toFixed(1),
-          speedMps: t.speedMps,
-          courseDeg: t.course,
-          cpa: +cpa.toFixed(1),
-          tcpa: +tcpa.toFixed(1),
-          cri: +cri.toFixed(3),
+          angle: +relBrg.toFixed(1), // Legacy compatibility
+          rangem: +t._smooth.dist.toFixed(1),
+          distance: +t._smooth.dist.toFixed(1), // Legacy compatibility
+          speedMps: +t.speedMps.toFixed(2),
+          courseDeg: +t.course.toFixed(1),
+          cpa: +t._smooth.cpa.toFixed(1),
+          tcpa: +t._smooth.tcpa.toFixed(1),
+          cri: +sCri.toFixed(3),
           threat
         });
       });
 
+
       totalDetections += processedTargets.length;
+      
+      const currentMax = processedTargets.length > 0 ? Math.max(...processedTargets.map(t => t.rangem)) : 0;
+      oasStats.maxRange = Math.max(oasStats.maxRange, currentMax);
+      
+      if (processedTargets.length > 0) {
+        const currentAvg = processedTargets.reduce((s, t) => s + t.rangem, 0) / processedTargets.length;
+        oasStats.avgRange = (oasStats.avgRange === 0) ? currentAvg : (oasStats.avgRange * 0.95 + currentAvg * 0.05);
+      }
+      
+      oasStats.sessionSeconds += 0.1; // tick is roughly 100ms
 
       const oasSensors = [
         { id: 'OAS-CAM-1', position: 'bow', center: 0 },
@@ -243,7 +293,11 @@ module.exports = {
           sensorId: sensor.id,
           position: sensor.position,
           status: 'active',
-          visibleTargets
+          visibleTargets: visibleTargets.map(vt => ({
+            ...vt,
+            distance: +vt.distance.toFixed(1),
+            relativeAngleInFov: +vt.relativeAngleInFov.toFixed(3)
+          }))
         };
       });
 
@@ -263,14 +317,16 @@ module.exports = {
         },
         statistics: {
           totalDetections,
-          maxRange: processedTargets.length > 0 ? Math.max(...processedTargets.map(t => t.rangem)) : 0,
+          maxRange: oasStats.maxRange,
+          avgRange: oasStats.avgRange,
+          sessionSeconds: oasStats.sessionSeconds,
           threatCounts: { high: highThreats, medium: medThreats, low: lowThreats }
         },
         suggestedManeuver: recommendedManeuver,
         status: "ACTIVE"
       };
 
-      if (tickCount % 5 === 0) client.publish(dataTopic, JSON.stringify(payload));
+      if (tickCount % 2 === 0) client.publish(dataTopic, JSON.stringify(payload));
     });
   }
 };

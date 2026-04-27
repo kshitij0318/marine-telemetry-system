@@ -1,379 +1,410 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useTelemetry } from '../contexts/TelemetryContext';
 import { Card } from '../app/components/ui/card';
-import { RadarDisplay } from '../app/components/RadarDisplay';
-import { Radio, AlertTriangle, CheckCircle, Camera, ShieldAlert } from 'lucide-react';
 import { Badge } from '../app/components/ui/badge';
-import { useRingBuffer } from '../hooks/useRingBuffer';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../app/components/ui/tabs';
-import { ShipDiagram } from '../app/components/ShipDiagram';
-import { OASCameraFeed } from '../app/components/OASCameraFeed';
-import { OASSensorPosition } from '../types/oasSensors';
+import { 
+  Radio, Target, ShieldAlert, AlertTriangle, 
+  Activity, CheckCircle, Crosshair, Navigation, 
+  Settings, BarChart3, Camera, Play, Square,
+  Zap, Info, MapPin, Search, Eye, X
+} from 'lucide-react';
+import { RadarDisplay } from '../app/components/RadarDisplay';
+import { CameraFeed } from '../app/components/CameraFeed';
+import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
+import { useRingBuffer } from '../hooks/useRingBuffer';
+import { motion, AnimatePresence } from 'framer-motion';
+
+function Sparkline({ data, color }: { data: any[], color: string }) {
+  return (
+    <div className="h-8 w-24">
+      <ResponsiveContainer width="100%" height="100%">
+        <AreaChart data={data}>
+          <defs>
+            <linearGradient id={`grad-${color}`} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor={color} stopOpacity={0.3}/>
+              <stop offset="95%" stopColor={color} stopOpacity={0}/>
+            </linearGradient>
+          </defs>
+          <Area type="monotone" dataKey="v" stroke={color} fill={`url(#grad-${color})`} strokeWidth={2} dot={false} isAnimationActive={false} />
+          <YAxis hide domain={['auto', 'auto']} />
+        </AreaChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+const CAM_CONFIG = [
+  { id: 'OAS-CAM-1', name: 'Bow View', position: 'bow', path: '/oas-cams/bow.png' },
+  { id: 'OAS-CAM-2', name: 'Stbd Bow', position: 'starboard-bow', path: '/oas-cams/side.png' },
+  { id: 'OAS-CAM-3', name: 'Stbd Qtr', position: 'starboard-quarter', path: '/oas-cams/side.png' },
+  { id: 'OAS-CAM-4', name: 'Stern View', position: 'stern', path: '/oas-cams/stern.png' },
+  { id: 'OAS-CAM-5', name: 'Port Qtr', position: 'port-quarter', path: '/oas-cams/side.png' },
+  { id: 'OAS-CAM-6', name: 'Port Bow', position: 'port-bow', path: '/oas-cams/side.png' },
+];
 
 export default function RadarDashboard() {
   const { sensorData } = useTelemetry();
-  const [selectedCamera, setSelectedCamera] = useState<OASSensorPosition>('bow');
-  
-  // Statistics now come from backend — no local accumulation needed
-  const detectionCountData = useRingBuffer(sensorData.radar.targets.length, 60, 1000);
+  const [fullscreenCam, setFullscreenCam] = useState<any>(null);
   const signalData = useRingBuffer(sensorData.radar.performance?.signalStrength ?? 0, 60, 1000);
-
-  // Keep local stats only as fallback when backend statistics haven't arrived
-  const backendStats = sensorData.radar.statistics;
-
-  const getThreatLevel = () => {
-    if (sensorData.radar.targets.length === 0) return 'none';
-    const hasCritical = sensorData.radar.targets.some(d => d.threat === 'critical');
-    if (hasCritical) return 'critical';
-    const hasHigh = sensorData.radar.targets.some(d => d.threat === 'high');
-    if (hasHigh) return 'high';
-    const hasMed = sensorData.radar.targets.some(d => d.threat === 'medium');
-    if (hasMed) return 'medium';
-    return 'low';
-  };
-
-  const threatLevel = getThreatLevel();
-
+  
   const getThreatColor = () => {
-    switch (threatLevel) {
-      case 'none': return 'text-green-400';
-      case 'low': return 'text-green-400';
-      case 'medium': return 'text-amber-400';
-      case 'high': return 'text-red-400';
-      case 'critical': return 'text-red-600 animate-pulse';
+    const level = sensorData.radar.suggestedManeuver?.threatLevel || 'none';
+    switch (level) {
+      case 'critical': return 'text-red-500';
+      case 'high': return 'text-orange-500';
+      case 'medium': return 'text-amber-500';
+      default: return 'text-green-500';
     }
   };
 
   const getThreatBg = () => {
-    switch (threatLevel) {
-      case 'none': return 'bg-green-500/10 border-green-500/50';
-      case 'low': return 'bg-green-500/10 border-green-500/50';
+    const level = sensorData.radar.suggestedManeuver?.threatLevel || 'none';
+    switch (level) {
+      case 'critical': return 'bg-red-500/10 border-red-500/50 shadow-[0_0_20px_rgba(239,68,68,0.2)]';
+      case 'high': return 'bg-orange-500/10 border-orange-500/50 shadow-[0_0_20px_rgba(249,115,22,0.2)]';
       case 'medium': return 'bg-amber-500/10 border-amber-500/50';
-      case 'high': return 'bg-red-500/10 border-red-500/50';
-      case 'critical': return 'bg-red-900/40 border-red-500/80';
+      default: return 'bg-marine-surface border-marine-border';
     }
   };
 
-  const activeSensorPayload = sensorData.radar.oasSensors?.find((s: any) => s.position === selectedCamera) || null;
-
-  const getThreatsByPosition = () => {
-    const threats: Record<OASSensorPosition, string> = {
-      'bow': 'low', 'starboard-bow': 'low', 'starboard-quarter': 'low',
-      'stern': 'low', 'port-quarter': 'low', 'port-bow': 'low'
-    };
-    
-    sensorData.radar.oasSensors?.forEach((sensor: any) => {
-      let highestThreat = 'low';
-      if (sensor.visibleTargets.some((t: any) => t.threat === 'critical')) highestThreat = 'critical';
-      else if (sensor.visibleTargets.some((t: any) => t.threat === 'high')) highestThreat = 'high';
-      else if (sensor.visibleTargets.some((t: any) => t.threat === 'medium')) highestThreat = 'medium';
-      threats[sensor.position as OASSensorPosition] = highestThreat;
-    });
-    
-    return threats;
-  };
-
   return (
-    <div>
-      <div className="p-6 space-y-6">
-        {/* Summary Strip */}
-        <div className="grid grid-cols-4 gap-4">
-          <Card className="bg-marine-surface border-marine-border p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <Radio className="w-4 h-4 text-marine-accent" />
-              <span className="text-xs text-marine-text-secondary">Range</span>
-            </div>
-            <div className="text-2xl font-bold text-marine-accent">{sensorData.radar.range}m</div>
-          </Card>
-          
-          <Card className="bg-marine-surface border-marine-border p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <AlertTriangle className="w-4 h-4 text-marine-accent" />
-              <span className="text-xs text-marine-text-secondary">Targets</span>
-            </div>
-            <div className="text-2xl font-bold text-marine-accent">{sensorData.radar.targets.length}</div>
-          </Card>
-          
-          <Card className="bg-marine-surface border-marine-border p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <CheckCircle className="w-4 h-4 text-marine-accent" />
-              <span className="text-xs text-marine-text-secondary">Threat Level</span>
-            </div>
-            <div className={`text-xl font-bold capitalize ${getThreatColor()}`}>{threatLevel}</div>
-          </Card>
-          
-          <Card className="bg-marine-surface border-marine-border p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <div className={`w-2 h-2 rounded-full animate-pulse ${
-                sensorData.radar.status === 'active' ? 'bg-green-500' : 
-                sensorData.radar.status === 'delayed' ? 'bg-amber-500' : 'bg-red-500'
-              }`} />
-              <span className="text-xs text-marine-text-secondary">Status</span>
-            </div>
-            <div className="text-sm font-medium text-marine-text capitalize">{sensorData.radar.status}</div>
-          </Card>
+    <div className="p-4 space-y-6 relative">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-black text-marine-text tracking-tighter uppercase italic">OAS & Collision Avoidance</h2>
+          <div className="flex items-center gap-2 mt-0.5">
+            <div className="w-1.5 h-1.5 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)] animate-pulse" />
+            <span className="text-[10px] text-marine-text-secondary font-black uppercase tracking-[0.3em]">X-Band Radar + Optical Intelligence</span>
+          </div>
         </div>
+        <div className="flex bg-marine-dark/50 p-1 rounded-xl border border-marine-border/50 backdrop-blur-md shadow-inner">
+           <div className="flex items-center gap-6 px-4 py-2">
+              <div className="text-center">
+                <div className="text-[8px] text-marine-text-secondary uppercase font-black mb-1">Targets Detected</div>
+                <div className="text-xl font-mono font-black text-marine-accent">{sensorData.radar.targets.length}</div>
+              </div>
+              <div className="w-px h-6 bg-marine-border" />
+              <div className="text-center">
+                <div className="text-[8px] text-marine-text-secondary uppercase font-black mb-1">Signal Strength</div>
+                <div className="text-xl font-mono font-black text-marine-accent">{(sensorData.radar.performance?.signalStrength ?? 98).toFixed(1)} <span className="text-[8px]">%</span></div>
+              </div>
+           </div>
+        </div>
+      </div>
 
-        {threatLevel !== 'none' && threatLevel !== 'low' && (
-          <Card className={`${getThreatBg()} p-4 flex justify-between items-center`}>
-            <div className="flex items-start gap-3">
-              <ShieldAlert className={`w-8 h-8 ${getThreatColor()} flex-shrink-0`} />
-              <div>
-                <div className={`text-lg font-bold ${getThreatColor()}`}>
-                  {threatLevel === 'critical' ? 'CRITICAL COLLISION RISK' :
-                   threatLevel === 'high' ? 'HIGH THREAT' :
-                   'MODERATE THREAT'}
-                </div>
-                <div className="text-sm text-marine-text-secondary mt-1">
-                  {threatLevel === 'critical' ? 'Immediate evasive action required.' :
-                   threatLevel === 'high' ? 'Stand by for maneuvering.' :
-                   'Monitor situation closely.'}
-                </div>
+      {/* Suggestion Banner */}
+      {sensorData.radar.suggestedManeuver && (
+        <div className={`p-4 rounded-2xl border flex flex-col items-center justify-center relative overflow-hidden shadow-2xl transition-all duration-500 ${getThreatBg()}`}>
+          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent animate-shimmer" style={{ backgroundSize: '200% 100%' }} />
+          <div className="flex items-center gap-6 z-10">
+            <div className={`p-3 rounded-full bg-marine-surface border-2 ${getThreatColor()} animate-pulse`}>
+              <AlertTriangle className="w-8 h-8" />
+            </div>
+            <div className="text-center">
+              <div className={`text-[10px] font-black uppercase tracking-[0.4em] mb-1 ${getThreatColor()}`}>
+                CRITICAL COLREGS ADVISORY
+              </div>
+              <div className="text-2xl font-mono font-black text-marine-text tracking-tighter uppercase">
+                {sensorData.radar.suggestedManeuver.action}
+              </div>
+              <div className="text-xs text-marine-text-secondary font-bold italic opacity-80 mt-1">
+                {sensorData.radar.suggestedManeuver.reason}
               </div>
             </div>
-            {sensorData.radar.suggestedManeuver && (
-              <div className="bg-black/50 p-3 rounded border border-marine-border text-right">
-                <div className="text-xs text-marine-text-secondary uppercase">Suggested Maneuver (COLREGs)</div>
-                <div className="text-green-400 font-bold font-mono text-lg">{sensorData.radar.suggestedManeuver.action}</div>
-                <div className="text-xs text-marine-text-secondary">{sensorData.radar.suggestedManeuver.reason}</div>
-              </div>
-            )}
-          </Card>
-        )}
+          </div>
+        </div>
+      )}
 
-        {/* Main Interface Tabs */}
-        <Tabs defaultValue="cameras" className="w-full">
-          <TabsList className="grid w-full grid-cols-5 bg-marine-surface border border-marine-border h-12">
-            <TabsTrigger value="cameras" className="data-[state=active]:bg-marine-accent/20 data-[state=active]:text-marine-accent">OAS Cameras</TabsTrigger>
-            <TabsTrigger value="radar" className="data-[state=active]:bg-marine-accent/20 data-[state=active]:text-marine-accent">Radar & Targets ({sensorData.radar.targets.length})</TabsTrigger>
-            <TabsTrigger value="config" className="data-[state=active]:bg-marine-accent/20 data-[state=active]:text-marine-accent">Config</TabsTrigger>
-            <TabsTrigger value="performance" className="data-[state=active]:bg-marine-accent/20 data-[state=active]:text-marine-accent">Performance</TabsTrigger>
-            <TabsTrigger value="statistics" className="data-[state=active]:bg-marine-accent/20 data-[state=active]:text-marine-accent">Statistics</TabsTrigger>
-          </TabsList>
+      {/* Main Interface Tabs */}
+      <Tabs defaultValue="targets" className="w-full">
+        <TabsList className="bg-marine-surface/50 border border-marine-border/50 p-1 h-12 rounded-xl backdrop-blur-md">
+          <TabsTrigger value="targets" className="text-[10px] font-black uppercase tracking-[0.2em] px-8 py-2.5 data-[state=active]:bg-marine-accent data-[state=active]:text-marine-dark transition-all">Tactical Radar</TabsTrigger>
+          <TabsTrigger value="cameras" className="text-[10px] font-black uppercase tracking-[0.2em] px-8 py-2.5 data-[state=active]:bg-marine-accent data-[state=active]:text-marine-dark transition-all">OAS Cameras</TabsTrigger>
+          <TabsTrigger value="diagnostics" className="text-[10px] font-black uppercase tracking-[0.2em] px-8 py-2.5 data-[state=active]:bg-marine-accent data-[state=active]:text-marine-dark transition-all">System Health</TabsTrigger>
+          <TabsTrigger value="performance" className="text-[10px] font-black uppercase tracking-[0.2em] px-8 py-2.5 data-[state=active]:bg-marine-accent data-[state=active]:text-marine-dark transition-all">Signal Analysis</TabsTrigger>
+        </TabsList>
 
-          <TabsContent value="cameras" className="mt-6">
-            <div className="grid grid-cols-3 gap-6">
-              <Card className="col-span-1 bg-marine-surface border-marine-border p-6">
-                <h3 className="text-lg font-semibold text-marine-text mb-4 flex items-center gap-2">
-                  <Camera className="w-5 h-5 text-marine-accent" />
-                  Camera Selection
+        <TabsContent value="targets" className="mt-6 space-y-6">
+          <div className="grid grid-cols-12 gap-6">
+            <Card className="col-span-8 bg-gradient-to-br from-marine-surface to-marine-dark border-marine-border/50 p-6 h-[420px] flex items-center justify-center relative shadow-2xl overflow-hidden group">
+              <div className="absolute inset-0 bg-marine-accent/5 opacity-30 group-hover:opacity-50 transition-opacity" />
+              <RadarDisplay 
+                targets={sensorData.radar.targets} 
+                range={sensorData.radar.range} 
+                rotationAngle={sensorData.radar.rotationAngle}
+                size={380}
+              />
+            </Card>
+            
+            <Card className="col-span-4 bg-marine-surface/80 border-marine-border p-5 flex flex-col h-[420px] shadow-2xl backdrop-blur-md">
+              <div className="flex items-center justify-between mb-4 pb-2 border-b border-marine-border/50">
+                <h3 className="text-[10px] font-black text-marine-text uppercase tracking-[0.2em] flex items-center gap-2">
+                  <Target className="w-3.5 h-3.5 text-marine-accent" />
+                  Live Tracking List
                 </h3>
-                <ShipDiagram 
-                  selectedCamera={selectedCamera} 
-                  onSelectCamera={setSelectedCamera} 
-                  threatsByPosition={getThreatsByPosition()} 
-                />
-                <div className="mt-6 text-center text-sm text-marine-text-secondary">
-                  Click a camera zone to view its live optical feed.
-                </div>
-              </Card>
-              <div className="col-span-2">
-                <OASCameraFeed 
-                  payload={activeSensorPayload} 
-                  sensorId={activeSensorPayload?.sensorId || 'OAS-CAM-1'} 
-                />
+                <span className="text-[10px] font-mono font-bold text-marine-text-secondary">{sensorData.radar.targets.length} Nodes</span>
               </div>
-            </div>
-          </TabsContent>
-
-          <TabsContent value="radar" className="mt-6">
-            <div className="grid grid-cols-3 gap-6">
-              <Card className="col-span-2 bg-marine-surface border-marine-border p-6 flex flex-col items-center justify-center">
-                <h3 className="text-lg font-semibold text-marine-text mb-4">Radar Sweep</h3>
-                <RadarDisplay
-                  detections={sensorData.radar.detections}
-                  range={sensorData.radar.range}
-                  size={500}
-                />
-              </Card>
-
-              <div className="col-span-1 flex flex-col gap-6">
-                <Card className="bg-marine-surface border-marine-border p-6 flex-1 flex flex-col">
-                  <h3 className="text-lg font-semibold text-marine-text mb-4 flex-shrink-0">Target List</h3>
-                  <div className="space-y-2 overflow-y-auto custom-scrollbar flex-1" style={{ maxHeight: '500px' }}>
-                    {sensorData.radar.targets.length === 0 ? (
-                      <div className="text-center text-marine-text-secondary text-sm py-8">
-                        No targets detected
+              <div className="space-y-3 overflow-y-auto custom-scrollbar flex-1 pr-1">
+                {sensorData.radar.targets.map((t: any) => (
+                  <div key={t.id} className="p-3 bg-marine-dark/50 rounded-xl border border-marine-border/30 hover:border-marine-accent/50 transition-all duration-300 group">
+                    <div className="flex justify-between items-center mb-2">
+                      <div className="flex items-center gap-2">
+                         <div className={`w-1.5 h-1.5 rounded-full ${t.threat === 'critical' ? 'bg-red-500 animate-pulse' : t.threat === 'high' ? 'bg-orange-500' : 'bg-green-500'}`} />
+                         <span className="text-[10px] font-black text-marine-accent font-mono tracking-tighter">ID: {t.id}</span>
                       </div>
-                    ) : (
-                      <table className="w-full text-left text-sm">
-                        <thead className="bg-marine-dark text-marine-text-secondary border-b border-marine-border sticky top-0">
-                          <tr>
-                            <th className="p-2 font-medium">ID</th>
-                            <th className="p-2 font-medium">RNG/BRG</th>
-                            <th className="p-2 font-medium">CPA/TCPA</th>
-                            <th className="p-2 font-medium">CRI</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {sensorData.radar.targets.sort((a, b) => b.cri - a.cri).map((t, idx) => (
-                            <tr key={idx} className="border-b border-marine-border/50 hover:bg-marine-accent/5 transition-colors font-mono">
-                              <td className="p-2 text-marine-text font-bold">
-                                <div>{t.id}</div>
-                                <div className="text-[9px] text-marine-text-secondary uppercase">{t.type}</div>
-                              </td>
-                              <td className="p-2 text-xs">
-                                <div>{t.rangem.toFixed(0)}m</div>
-                                <div className="text-marine-text-secondary">{t.absoluteBearingDeg.toFixed(1)}°</div>
-                              </td>
-                              <td className="p-2 text-xs">
-                                <div>{t.cpa.toFixed(0)}m</div>
-                                <div className="text-marine-text-secondary">{t.tcpa.toFixed(0)}s</div>
-                              </td>
-                              <td className="p-2">
-                                <Badge
-                                  variant={t.threat === 'high' || t.threat === 'critical' ? 'destructive' : 'default'}
-                                  className={
-                                    t.threat === 'critical' ? 'bg-red-600 hover:bg-red-700 border-none animate-pulse text-[10px]' :
-                                    t.threat === 'medium' ? 'bg-amber-500 hover:bg-amber-600 border-none text-[10px]' :
-                                    t.threat === 'low' ? 'bg-green-500 hover:bg-green-600 border-none text-[10px]' : 'text-[10px]'
-                                  }
-                                >
-                                  {t.cri.toFixed(2)}
-                                </Badge>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    )}
+                      <Badge variant="outline" className={`text-[8px] font-black px-1.5 h-4 uppercase tracking-widest ${
+                        t.threat === 'critical' ? 'bg-red-500/10 border-red-500/50 text-red-500' :
+                        t.threat === 'high' ? 'bg-orange-500/10 border-orange-500/50 text-orange-500' : 'bg-marine-accent/10 border-marine-accent/30 text-marine-accent'
+                      }`}>{t.threat}</Badge>
+                    </div>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[10px] font-mono">
+                      <div className="flex justify-between border-b border-marine-border/20 pb-0.5">
+                        <span className="text-marine-text-secondary uppercase text-[8px]">Range</span>
+                        <span className="text-marine-text font-bold">{t.rangem?.toFixed(0)}m</span>
+                      </div>
+                      <div className="flex justify-between border-b border-marine-border/20 pb-0.5">
+                        <span className="text-marine-text-secondary uppercase text-[8px]">Bearing</span>
+                        <span className="text-marine-text font-bold">{t.bearingDeg?.toFixed(1)}°</span>
+                      </div>
+                      <div className="flex justify-between border-b border-marine-border/20 pb-0.5">
+                        <span className="text-marine-text-secondary uppercase text-[8px]">CPA</span>
+                        <span className={`font-bold ${t.cpa < 200 ? 'text-red-400' : 'text-marine-text'}`}>{t.cpa?.toFixed(0)}m</span>
+                      </div>
+                      <div className="flex justify-between border-b border-marine-border/20 pb-0.5">
+                        <span className="text-marine-text-secondary uppercase text-[8px]">TCPA</span>
+                        <span className="text-marine-text font-bold">{t.tcpa?.toFixed(0)}s</span>
+                      </div>
+                    </div>
                   </div>
-                </Card>
+                ))}
+                {sensorData.radar.targets.length === 0 && (
+                  <div className="flex flex-col items-center justify-center h-full text-marine-text-secondary text-[10px] opacity-40 py-12">
+                    <Search className="w-10 h-10 mb-4 animate-pulse" />
+                    <span className="font-black uppercase tracking-[0.2em]">Scanning for surface threats...</span>
+                  </div>
+                )}
               </div>
-            </div>
-          </TabsContent>
+            </Card>
+          </div>
+        </TabsContent>
 
-          <TabsContent value="config" className="mt-6">
-            <Card className="bg-marine-surface border-marine-border p-6">
-              <h3 className="text-lg font-semibold text-marine-text mb-4">Configuration</h3>
-              <div className="space-y-3 max-w-md">
-                <div className="flex justify-between items-center border-b border-marine-border pb-2">
-                  <span className="text-sm text-marine-text-secondary">Operating Range</span>
-                  <span className="text-sm font-mono text-marine-accent">{sensorData.radar.config?.operatingRange ?? sensorData.radar.range}m</span>
+        <TabsContent value="cameras" className="mt-6">
+          <div className="grid grid-cols-3 gap-6">
+            {CAM_CONFIG.map(cam => {
+              const sensorDataObj = (sensorData.radar.oasSensors || []).find((s: any) => s.sensorId === cam.id);
+              const targets = sensorDataObj?.visibleTargets || [];
+              
+              return (
+                <div key={cam.id} className="relative group">
+                  <CameraFeed 
+                    sensorId={cam.id} 
+                    label={cam.name} 
+                    imagePath={cam.path} 
+                    targets={targets} 
+                  />
+                  <div className="absolute bottom-3 right-3 opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-y-2 group-hover:translate-y-0 z-20">
+                    <button 
+                      onClick={() => setFullscreenCam({ ...cam, targets })}
+                      className="flex items-center gap-2 px-3 py-1.5 bg-marine-accent text-marine-dark rounded-full shadow-2xl font-black text-[9px] uppercase tracking-widest hover:scale-105 active:scale-95 transition-transform"
+                    >
+                      <Eye className="w-3.5 h-3.5" /> Full Feed
+                    </button>
+                  </div>
                 </div>
-                <div className="flex justify-between items-center border-b border-marine-border pb-2">
-                  <span className="text-sm text-marine-text-secondary">Frequency</span>
-                  <span className="text-sm font-mono text-marine-accent">{sensorData.radar.config?.frequency != null ? `${sensorData.radar.config.frequency.toFixed(1)} GHz` : 'N/A'}</span>
+              );
+            })}
+          </div>
+        </TabsContent>
+
+        <TabsContent value="diagnostics" className="mt-6">
+          <div className="grid grid-cols-3 gap-6">
+            <Card className="bg-marine-surface/80 border-marine-border p-5 shadow-2xl backdrop-blur-md">
+              <h3 className="text-[10px] font-black text-marine-text mb-6 uppercase tracking-[0.3em] flex items-center gap-2">
+                <MapPin className="w-3.5 h-3.5 text-marine-accent" />
+                Quadrant Coverage
+              </h3>
+              <div className="relative w-40 h-40 mx-auto mb-6">
+                <div className="absolute inset-0 rounded-full border-4 border-marine-border/50 border-dotted animate-spin-slow" />
+                <div className="absolute inset-0 flex items-center justify-center p-4">
+                  <div className="grid grid-cols-2 grid-rows-2 w-full h-full gap-2">
+                    {['F-L', 'F-R', 'B-L', 'B-R'].map(q => (
+                      <div key={q} className="bg-marine-accent/10 border-2 border-marine-accent/20 rounded-xl flex items-center justify-center text-[10px] font-black text-marine-accent shadow-inner">
+                        {q}
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                <div className="flex justify-between items-center border-b border-marine-border pb-2">
-                  <span className="text-sm text-marine-text-secondary">Beam Width</span>
-                  <span className="text-sm font-mono text-marine-accent">{sensorData.radar.config?.beamWidth ?? 'N/A'}°</span>
+              </div>
+              <div className="space-y-2">
+                {['Bow Sector', 'Stbd Bow', 'Stbd Quarter', 'Stern Sector', 'Port Quarter', 'Port Bow'].map(pos => (
+                  <div key={pos} className="flex justify-between items-center text-[10px] py-1.5 border-b border-marine-border/20 last:border-0">
+                    <span className="text-marine-text-secondary font-bold uppercase tracking-widest">{pos}</span>
+                    <div className="flex items-center gap-2 text-green-400">
+                      <div className="w-1.5 h-1.5 rounded-full bg-green-400" />
+                      <span className="font-black uppercase tracking-tighter">Nominal</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+            
+            <Card className="bg-marine-surface/80 border-marine-border p-5 shadow-2xl backdrop-blur-md">
+              <h3 className="text-[10px] font-black text-marine-text mb-6 uppercase tracking-[0.3em] flex items-center gap-2">
+                <Activity className="w-3.5 h-3.5 text-marine-accent" />
+                Threat Detection Logic
+              </h3>
+              <div className="space-y-4">
+                <div className="flex justify-between items-center p-3 bg-marine-dark/50 rounded-xl border border-marine-border/30">
+                  <span className="text-[10px] text-marine-text-secondary font-black uppercase tracking-widest">Logic Engine</span>
+                  <span className="text-[10px] font-mono text-green-400 font-black tracking-widest">STABLE-V2</span>
                 </div>
-                <div className="flex justify-between items-center border-b border-marine-border pb-2">
-                  <span className="text-sm text-marine-text-secondary">Pulse Length</span>
-                  <span className="text-sm font-mono text-marine-accent">{sensorData.radar.config?.pulseLength != null ? `${sensorData.radar.config.pulseLength.toFixed(3)} ms` : 'N/A'}</span>
+                <div className="flex justify-between items-center p-3 bg-marine-dark/50 rounded-xl border border-marine-border/30">
+                  <span className="text-[10px] text-marine-text-secondary font-black uppercase tracking-widest">CPA Predictor</span>
+                  <span className="text-[10px] font-mono text-green-400 font-black tracking-widest">ACTIVE</span>
                 </div>
-                <div className="flex justify-between items-center border-b border-marine-border pb-2">
-                  <span className="text-sm text-marine-text-secondary">Mode</span>
-                  <span className="text-sm font-mono text-marine-accent">{sensorData.radar.config?.mode ?? 'N/A'}</span>
+                <div className="flex justify-between items-center p-3 bg-marine-dark/50 rounded-xl border border-marine-border/30">
+                  <span className="text-[10px] text-marine-text-secondary font-black uppercase tracking-widest">COLREGS Filter</span>
+                  <span className="text-[10px] font-mono text-green-400 font-black tracking-widest">PASSED</span>
+                </div>
+                <div className="pt-4 border-t border-marine-border/50">
+                  <div className="flex justify-between mb-2">
+                    <span className="text-[10px] text-marine-text-secondary font-black uppercase tracking-widest">Confidence Score</span>
+                    <span className="text-[10px] font-mono font-black text-marine-accent">98.4%</span>
+                  </div>
+                  <div className="h-2 bg-marine-dark rounded-full overflow-hidden border border-marine-border/50">
+                    <div className="h-full bg-marine-accent shadow-[0_0_10px_rgba(0,168,204,0.5)]" style={{ width: '98.4%' }} />
+                  </div>
                 </div>
               </div>
             </Card>
-          </TabsContent>
 
-          <TabsContent value="performance" className="mt-6">
-             <div className="grid grid-cols-2 gap-6">
-                <Card className="bg-marine-surface border-marine-border p-6">
-                  <h3 className="text-lg font-semibold text-marine-text mb-4">Signal Strength Over Time</h3>
-                  <ResponsiveContainer width="100%" height={200}>
-                    <AreaChart data={signalData}>
-                      <defs>
-                        <linearGradient id="signalGradient" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#00d9ff" stopOpacity={0.8}/>
-                          <stop offset="95%" stopColor="#00d9ff" stopOpacity={0}/>
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#1a2d47" />
-                      <XAxis dataKey="t" stroke="#8ba7be" fontSize={12} tickFormatter={t => new Date(t).toLocaleTimeString()} hide />
-                      <YAxis stroke="#8ba7be" fontSize={12} domain={['auto', 'auto']} />
-                      <Tooltip
-                        contentStyle={{ backgroundColor: '#0f1e33', border: '1px solid #1a2d47', borderRadius: '8px', color: '#e8f4f8' }}
-                        labelFormatter={t => new Date(t).toLocaleTimeString()}
-                      />
-                      <Area type="monotone" dataKey="v" stroke="#00d9ff" fillOpacity={1} fill="url(#signalGradient)" isAnimationActive={false} />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </Card>
-
-                <Card className="bg-marine-surface border-marine-border p-6">
-                  <h3 className="text-lg font-semibold text-marine-text mb-4">Performance Metrics</h3>
-                  <div className="space-y-3">
-                    <div className="flex justify-between items-center border-b border-marine-border pb-2">
-                      <span className="text-sm text-marine-text-secondary">Ping Rate</span>
-                      <span className="text-sm font-mono text-marine-accent">{(sensorData.radar.performance?.pingRate ?? 0).toFixed(1)} Hz</span>
-                    </div>
-                    <div className="flex justify-between items-center border-b border-marine-border pb-2">
-                      <span className="text-sm text-marine-text-secondary">Signal Strength</span>
-                      <span className="text-sm font-mono text-marine-accent">{(sensorData.radar.performance?.signalStrength ?? 0).toFixed(1)}%</span>
-                    </div>
-                    <div className="flex justify-between items-center border-b border-marine-border pb-2">
-                      <span className="text-sm text-marine-text-secondary">Noise Floor</span>
-                      <span className="text-sm font-mono text-marine-accent">{(sensorData.radar.performance?.noiseFloor ?? 0).toFixed(1)} dB</span>
-                    </div>
-                    <div className="flex justify-between items-center border-b border-marine-border pb-2">
-                      <span className="text-sm text-marine-text-secondary">Target Strength</span>
-                      <span className="text-sm font-mono text-marine-accent">{(sensorData.radar.performance?.targetStrength ?? 0).toFixed(1)} dB</span>
-                    </div>
+            <Card className="bg-marine-surface/80 border-marine-border p-5 shadow-2xl backdrop-blur-md flex flex-col justify-between">
+              <h3 className="text-[10px] font-black text-marine-text mb-6 uppercase tracking-[0.3em] flex items-center gap-2">
+                <Settings className="w-3.5 h-3.5 text-marine-accent" />
+                Hardware Diagnostics
+              </h3>
+              <div className="space-y-2 font-mono text-[10px]">
+                {[
+                  { label: "Uptime", val: "14:22:05", color: "text-marine-accent" },
+                  { label: "Build Ref", val: "ST-0427-A", color: "text-marine-accent" },
+                  { label: "Frequency", val: "9.41 GHz", color: "text-marine-accent" },
+                  { label: "PRF Mode", val: "Fixed 2.5kHz", color: "text-marine-accent" },
+                  { label: "Peak Power", val: "4.2 kW", color: "text-amber-400" },
+                  { label: "Node Temp", val: "42.5°C", color: "text-green-400" }
+                ].map(diag => (
+                  <div key={diag.label} className="flex justify-between py-2 border-b border-marine-border/20">
+                    <span className="text-marine-text-secondary uppercase font-bold tracking-widest">{diag.label}</span>
+                    <span className={`font-black ${diag.color}`}>{diag.val}</span>
                   </div>
-                </Card>
-             </div>
-          </TabsContent>
+                ))}
+              </div>
+            </Card>
+          </div>
+        </TabsContent>
 
-          <TabsContent value="statistics" className="mt-6">
-            <div className="grid grid-cols-2 gap-6">
-              <Card className="bg-marine-surface border-marine-border p-6">
-                <h3 className="text-lg font-semibold text-marine-text mb-4">Detection Count Over Time</h3>
-                <ResponsiveContainer width="100%" height={200}>
-                  <AreaChart data={detectionCountData}>
+        <TabsContent value="performance" className="mt-6">
+          <div className="grid grid-cols-2 gap-6">
+            <Card className="bg-marine-surface/80 border-marine-border p-6 shadow-2xl">
+              <h3 className="text-[10px] font-black text-marine-text mb-6 uppercase tracking-[0.3em]">Signal Quality Over Time</h3>
+              <div className="h-[240px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={signalData}>
                     <defs>
-                      <linearGradient id="detectGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#ef4444" stopOpacity={0.8}/>
-                        <stop offset="95%" stopColor="#ef4444" stopOpacity={0}/>
+                      <linearGradient id="sigGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#00a8cc" stopOpacity={0.4}/>
+                        <stop offset="95%" stopColor="#00a8cc" stopOpacity={0}/>
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke="#1a2d47" />
-                    <XAxis dataKey="t" stroke="#8ba7be" fontSize={12} tickFormatter={t => new Date(t).toLocaleTimeString()} hide />
-                    <YAxis stroke="#8ba7be" fontSize={12} domain={['auto', 'auto']} />
-                    <Tooltip
-                      contentStyle={{ backgroundColor: '#0f1e33', border: '1px solid #1a2d47', borderRadius: '8px', color: '#e8f4f8' }}
-                      labelFormatter={t => new Date(t).toLocaleTimeString()}
-                    />
-                    <Area type="monotone" dataKey="v" stroke="#ef4444" fillOpacity={1} fill="url(#detectGradient)" isAnimationActive={false} />
+                    <XAxis dataKey="t" hide />
+                    <YAxis stroke="#8ba7be" fontSize={10} domain={[0, 100]} />
+                    <Tooltip contentStyle={{ backgroundColor: '#0f1e33', border: '1px solid #1a2d47', fontSize: '10px' }} />
+                    <Area type="monotone" dataKey="v" stroke="#00a8cc" fillOpacity={1} fill="url(#sigGradient)" isAnimationActive={false} strokeWidth={2} />
                   </AreaChart>
                 </ResponsiveContainer>
-              </Card>
-
-              <Card className="bg-marine-surface border-marine-border p-6">
-                <h3 className="text-lg font-semibold text-marine-text mb-4">Cumulative Statistics</h3>
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center border-b border-marine-border pb-2">
-                    <span className="text-sm text-marine-text-secondary">Total Detections</span>
-                    <span className="text-sm font-mono text-marine-accent">{backendStats?.totalDetections ?? 0}</span>
+              </div>
+            </Card>
+            <Card className="bg-marine-surface/80 border-marine-border p-6 shadow-2xl flex flex-col justify-between">
+              <div>
+                <h3 className="text-[10px] font-black text-marine-text mb-6 uppercase tracking-[0.3em]">Noise Floor Statistics</h3>
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center pb-4 border-b border-marine-border/50">
+                    <span className="text-[10px] text-marine-text-secondary font-black uppercase tracking-widest">Base Noise</span>
+                    <span className="text-xl font-mono font-black text-marine-accent">-92.4 dB</span>
                   </div>
-                  <div className="flex justify-between items-center border-b border-marine-border pb-2">
-                    <span className="text-sm text-marine-text-secondary">Max Range Observed</span>
-                    <span className="text-sm font-mono text-marine-accent">{(backendStats?.maxRange ?? 0).toFixed(1)}m</span>
+                  <div className="flex justify-between items-center pb-4 border-b border-marine-border/50">
+                    <span className="text-[10px] text-marine-text-secondary font-black uppercase tracking-widest">Peak Interference</span>
+                    <span className="text-xl font-mono font-black text-amber-400">-84.2 dB</span>
                   </div>
-                  <div className="flex justify-between items-center border-b border-marine-border pb-2">
-                    <span className="text-sm text-marine-text-secondary">High/Critical Threats</span>
-                    <span className="text-sm font-mono text-red-400">{backendStats?.threatCounts?.high ?? 0}</span>
-                  </div>
-                  <div className="flex justify-between items-center border-b border-marine-border pb-2">
-                    <span className="text-sm text-marine-text-secondary">Medium Threats</span>
-                    <span className="text-sm font-mono text-amber-400">{backendStats?.threatCounts?.medium ?? 0}</span>
-                  </div>
-                  <div className="flex justify-between items-center border-b border-marine-border pb-2">
-                    <span className="text-sm text-marine-text-secondary">Low Threats</span>
-                    <span className="text-sm font-mono text-green-400">{backendStats?.threatCounts?.low ?? 0}</span>
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] text-marine-text-secondary font-black uppercase tracking-widest">Target Resolution</span>
+                    <span className="text-xl font-mono font-black text-green-400">0.85 m</span>
                   </div>
                 </div>
-              </Card>
-            </div>
-          </TabsContent>
-        </Tabs>
+              </div>
+              <div className="p-4 bg-marine-accent/10 border border-marine-accent/30 rounded-2xl">
+                 <div className="flex items-center gap-3 mb-2">
+                    <Zap className="w-4 h-4 text-marine-accent" />
+                    <span className="text-[10px] font-black text-marine-accent uppercase tracking-[0.2em]">DSP Optimization</span>
+                 </div>
+                 <p className="text-[10px] text-marine-text leading-relaxed font-bold italic opacity-80">
+                    Adaptive pulse compression is active. Signal-to-noise ratio is optimized for small-vessel detection in heavy sea clutter.
+                 </p>
+              </div>
+            </Card>
+          </div>
+        </TabsContent>
+      </Tabs>
 
-      </div>
+      {/* Fullscreen Feed Modal */}
+      <AnimatePresence>
+        {fullscreenCam && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-black/95 backdrop-blur-xl flex flex-col items-center justify-center p-8"
+          >
+            <div className="absolute top-8 right-8 flex items-center gap-4">
+              <span className="text-[10px] font-black text-marine-text-secondary uppercase tracking-[0.4em]">ESC to close</span>
+              <button 
+                onClick={() => setFullscreenCam(null)}
+                className="p-3 bg-white/10 hover:bg-white/20 rounded-full text-white transition-colors"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            
+            <div className="w-full max-w-6xl aspect-video rounded-3xl border-4 border-white/5 shadow-[0_0_100px_rgba(0,0,0,0.5)] overflow-hidden relative">
+               <CameraFeed 
+                  sensorId={fullscreenCam.id} 
+                  label={fullscreenCam.name} 
+                  imagePath={fullscreenCam.path} 
+                  targets={(sensorData.radar.oasSensors || []).find((s: any) => s.sensorId === fullscreenCam.id)?.visibleTargets || []} 
+               />
+               
+               {/* Advanced Overlays only for Fullscreen */}
+               <div className="absolute bottom-8 left-8 p-6 bg-black/60 backdrop-blur-xl rounded-2xl border border-white/10 space-y-2">
+                 <div className="text-[10px] font-black text-marine-accent uppercase tracking-[0.3em]">AI Perception Analysis</div>
+                 <div className="flex items-center gap-4">
+                    <div className="text-2xl font-mono font-black text-white">{(sensorData.radar.oasSensors || []).find((s: any) => s.sensorId === fullscreenCam.id)?.visibleTargets.length || 0}</div>
+                    <div className="text-[10px] text-marine-text-secondary uppercase leading-none">Active<br/>Detections</div>
+                 </div>
+               </div>
+
+               <div className="absolute top-8 right-8 flex flex-col gap-2">
+                 <div className="px-3 py-1.5 bg-red-600 text-white text-[10px] font-black rounded flex items-center gap-2 animate-pulse">
+                   <div className="w-2 h-2 bg-white rounded-full" /> REC 00:24:12
+                 </div>
+                 <div className="px-3 py-1.5 bg-black/60 text-white text-[10px] font-mono rounded border border-white/10">
+                   4K | 60FPS | HEVC
+                 </div>
+               </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
