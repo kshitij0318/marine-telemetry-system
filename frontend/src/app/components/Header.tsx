@@ -1,14 +1,15 @@
 import React from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useTelemetry } from '../../contexts/TelemetryContext';
-import { Sun, Moon, Target, Wifi, WifiOff } from 'lucide-react';
+import { Sun, Moon, Target, Wifi, WifiOff, Maximize2, Minimize2 } from 'lucide-react';
 import { Button } from './ui/button';
-import { Switch } from './ui/switch';
 import { ParticleButton } from './ParticleButton';
+import { useFullscreen } from '../../hooks/useFullscreen';
 
 export function Header() {
   const { theme, setTheme } = useTheme();
   const { isConnected } = useTelemetry();
+  const { isFullscreen, toggle: toggleFullscreen } = useFullscreen();
 
   const cycleTheme = () => {
     const themes = ['marine-dark', 'light', 'tactical'] as const;
@@ -50,6 +51,20 @@ export function Header() {
           {getThemeIcon()}
           <span className="ml-2 text-sm capitalize">{theme.replace('-', ' ')}</span>
         </ParticleButton>
+
+        {/* Fullscreen Toggle */}
+        <Button
+          size="icon"
+          variant="ghost"
+          onClick={toggleFullscreen}
+          title={isFullscreen ? 'Exit Fullscreen (Esc)' : 'Enter Fullscreen'}
+          className="w-9 h-9 text-marine-text-secondary hover:text-marine-accent border border-marine-border hover:border-marine-accent transition-colors"
+        >
+          {isFullscreen
+            ? <Minimize2 className="w-4 h-4" />
+            : <Maximize2 className="w-4 h-4" />
+          }
+        </Button>
       </div>
     </header>
   );

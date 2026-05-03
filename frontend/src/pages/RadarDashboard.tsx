@@ -10,7 +10,7 @@ import {
   Zap, Info, MapPin, Search, Eye, X
 } from 'lucide-react';
 import { RadarDisplay } from '../app/components/RadarDisplay';
-import { CameraFeed } from '../app/components/CameraFeed';
+import { OASEchoView } from '../app/components/OASEchoView';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import { useRingBuffer } from '../hooks/useRingBuffer';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -34,13 +34,14 @@ function Sparkline({ data, color }: { data: any[], color: string }) {
   );
 }
 
-const CAM_CONFIG = [
-  { id: 'OAS-CAM-1', name: 'Bow View', position: 'bow', path: '/oas-cams/bow.png' },
-  { id: 'OAS-CAM-2', name: 'Stbd Bow', position: 'starboard-bow', path: '/oas-cams/side.png' },
-  { id: 'OAS-CAM-3', name: 'Stbd Qtr', position: 'starboard-quarter', path: '/oas-cams/side.png' },
-  { id: 'OAS-CAM-4', name: 'Stern View', position: 'stern', path: '/oas-cams/stern.png' },
-  { id: 'OAS-CAM-5', name: 'Port Qtr', position: 'port-quarter', path: '/oas-cams/side.png' },
-  { id: 'OAS-CAM-6', name: 'Port Bow', position: 'port-bow', path: '/oas-cams/side.png' },
+// OAS sensor definitions — matches radarSimulator.js OAS_SENSORS
+const OAS_SENSORS = [
+  { id: 'OAS-CAM-1', label: 'Bow',          fovDeg: 60, maxRangeM: 500, bearingCenter: 0   },
+  { id: 'OAS-CAM-2', label: 'Stbd Bow',     fovDeg: 60, maxRangeM: 500, bearingCenter: 60  },
+  { id: 'OAS-CAM-3', label: 'Stbd Quarter', fovDeg: 60, maxRangeM: 500, bearingCenter: 120 },
+  { id: 'OAS-CAM-4', label: 'Stern',        fovDeg: 60, maxRangeM: 500, bearingCenter: 180 },
+  { id: 'OAS-CAM-5', label: 'Port Quarter', fovDeg: 60, maxRangeM: 500, bearingCenter: 240 },
+  { id: 'OAS-CAM-6', label: 'Port Bow',     fovDeg: 60, maxRangeM: 500, bearingCenter: 300 },
 ];
 
 export default function RadarDashboard() {
@@ -190,23 +191,26 @@ export default function RadarDashboard() {
         </TabsContent>
 
         <TabsContent value="cameras" className="mt-6">
-          <div className="grid grid-cols-3 gap-6">
-            {CAM_CONFIG.map(cam => {
-              const sensorDataObj = (sensorData.radar.oasSensors || []).find((s: any) => s.sensorId === cam.id);
-              const targets = sensorDataObj?.visibleTargets || [];
-              
+          <div className="grid grid-cols-3 gap-4">
+            {OAS_SENSORS.map(sensor => {
+              const sd = (sensorData.radar.oasSensors || []).find((s: any) => s.sensorId === sensor.id);
+              const detections = (sd?.visibleTargets || []).map((t: any) => ({
+                id: t.id,
+                threat: t.threat,
+                relativeAngleInFov: t.relativeAngleInFov ?? 0,
+                distance: t.distance ?? t.rangem ?? 500,
+              }));
               return (
-                <div key={cam.id} className="relative group">
-                  <CameraFeed 
-                    sensorId={cam.id} 
-                    label={cam.name} 
-                    imagePath={cam.path} 
-                    targets={targets} 
+                <div key={sensor.id} className="relative group aspect-video">
+                  <OASEchoView
+                    sensor={sensor}
+                    detections={detections}
+                    isActive={true}
                   />
-                  <div className="absolute bottom-3 right-3 opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-y-2 group-hover:translate-y-0 z-20">
-                    <button 
-                      onClick={() => setFullscreenCam({ ...cam, targets })}
-                      className="flex items-center gap-2 px-3 py-1.5 bg-marine-accent text-marine-dark rounded-full shadow-2xl font-black text-[9px] uppercase tracking-widest hover:scale-105 active:scale-95 transition-transform"
+                  <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-all duration-300 z-20">
+                    <button
+                      onClick={() => setFullscreenCam({ sensor, detections })}
+                      className="flex items-center gap-2 px-3 py-1.5 bg-[#00ff64] text-black rounded-full shadow-[0_0_15px_rgba(0,255,100,0.3)] font-black text-[9px] uppercase tracking-widest hover:scale-105 active:scale-95 transition-transform"
                     >
                       <Eye className="w-3.5 h-3.5" /> Full Feed
                     </button>
@@ -375,30 +379,28 @@ export default function RadarDashboard() {
                 <X className="w-6 h-6" />
               </button>
             </div>
-            
-            <div className="w-full max-w-6xl aspect-video rounded-3xl border-4 border-white/5 shadow-[0_0_100px_rgba(0,0,0,0.5)] overflow-hidden relative">
-               <CameraFeed 
-                  sensorId={fullscreenCam.id} 
-                  label={fullscreenCam.name} 
-                  imagePath={fullscreenCam.path} 
-                  targets={(sensorData.radar.oasSensors || []).find((s: any) => s.sensorId === fullscreenCam.id)?.visibleTargets || []} 
+                      <div className="w-full max-w-6xl aspect-video rounded-3xl border-4 border-white/5 shadow-[0_0_100px_rgba(0,0,0,0.5)] overflow-hidden relative">
+               <OASEchoView
+                  sensor={fullscreenCam.sensor}
+                  detections={fullscreenCam.detections}
+                  isActive={true}
                />
                
                {/* Advanced Overlays only for Fullscreen */}
                <div className="absolute bottom-8 left-8 p-6 bg-black/60 backdrop-blur-xl rounded-2xl border border-white/10 space-y-2">
-                 <div className="text-[10px] font-black text-marine-accent uppercase tracking-[0.3em]">AI Perception Analysis</div>
+                 <div className="text-[10px] font-black text-[#00ff64] uppercase tracking-[0.3em]">Echo Perception Analysis</div>
                  <div className="flex items-center gap-4">
-                    <div className="text-2xl font-mono font-black text-white">{(sensorData.radar.oasSensors || []).find((s: any) => s.sensorId === fullscreenCam.id)?.visibleTargets.length || 0}</div>
-                    <div className="text-[10px] text-marine-text-secondary uppercase leading-none">Active<br/>Detections</div>
+                    <div className="text-2xl font-mono font-black text-white">{fullscreenCam.detections.length}</div>
+                    <div className="text-[10px] text-marine-text-secondary uppercase leading-none">Active<br/>Echo Returns</div>
                  </div>
                </div>
 
                <div className="absolute top-8 right-8 flex flex-col gap-2">
-                 <div className="px-3 py-1.5 bg-red-600 text-white text-[10px] font-black rounded flex items-center gap-2 animate-pulse">
-                   <div className="w-2 h-2 bg-white rounded-full" /> REC 00:24:12
+                 <div className="px-3 py-1.5 bg-green-600/20 text-[#00ff64] border border-[#00ff64]/40 text-[10px] font-black rounded flex items-center gap-2">
+                   <div className="w-2 h-2 bg-[#00ff64] rounded-full animate-pulse" /> SONAR ACTIVE
                  </div>
                  <div className="px-3 py-1.5 bg-black/60 text-white text-[10px] font-mono rounded border border-white/10">
-                   4K | 60FPS | HEVC
+                   HI-RES | 10Hz | RAW
                  </div>
                </div>
             </div>

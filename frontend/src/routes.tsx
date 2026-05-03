@@ -8,6 +8,7 @@ import ThrusterDashboard from "./pages/ThrusterDashboard";
 import RadarDashboard from "./pages/RadarDashboard";
 import FleetOverview from "./pages/FleetOverview";
 import Settings from "./pages/Settings";
+import PayloadDashboard from "./pages/PayloadDashboard";
 
 export const router = createBrowserRouter([
   {
@@ -22,6 +23,7 @@ export const router = createBrowserRouter([
       { path: "current-meter", Component: CurrentMeterDashboard },
       { path: "thruster", Component: ThrusterDashboard },
       { path: "radar", Component: RadarDashboard },
+      { path: "payload", Component: PayloadDashboard },
       { path: "settings", Component: Settings },
     ],
   },

@@ -7,7 +7,7 @@ import {
   Play, Square, MapPin, Navigation, Navigation2, 
   Settings, Layers, Trash2, AlertTriangle, Eye, EyeOff, Info,
   Search, Crosshair, ChevronRight, Activity, Zap, X,
-  FileDown, Upload
+  FileDown, Upload, Ban, Fence
 } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap, Polygon, Circle, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
@@ -22,6 +22,9 @@ import WaypointActionEditor from '../app/components/WaypointActionEditor';
 import { WaypointActionConfig } from '../types/waypointActions';
 import { generateLawnmower, generateSpiral, generateExpandingSquare, generateRadial, generateCrosshatch } from '../utils/surveyPatterns';
 import { exportMissionToCSV, importMissionFromCSV } from '../utils/missionCSV';
+import { Geofence, GeofenceMode } from '../types/geofence';
+import { validateWaypointAgainstGeofences, filterWaypointsByGeofences } from '../utils/geofenceValidator';
+import { toast } from 'sonner';
 
 // ── Types ──────────────────────────────────────────────────────────────
 interface Waypoint {
@@ -91,8 +94,17 @@ export default function MapCommandCenter() {
     active: false, status: 'complete', deltaDistance: 0, modifiedWaypoints: 0,
   });
 
+  const [geofences, setGeofences] = useState<Geofence[]>([]);
+  const [isDrawingGeofence, setIsDrawingGeofence] = useState(false);
+  const [geofenceDrawMode, setGeofenceDrawMode] = useState<GeofenceMode>('exclusion');
+
   const [selectedWaypointId, setSelectedWaypointId] = useState<string | null>(null);
   const [editingPos, setEditingPos] = useState<{ lat: number; lng: number } | null>(null);
+
+  const homeLocation = useMemo(() => {
+    const saved = localStorage.getItem('marineTelemetry_homeLocation');
+    return saved ? JSON.parse(saved) : null;
+  }, [navigationDestination]); // Re-evaluate when nav changes (as proxy for home set in panel)
 
   // Nudge step in degrees (~55m)
   const NUDGE_DEG = 0.0005;
@@ -298,6 +310,7 @@ export default function MapCommandCenter() {
       ownerPage: 'mission',
       waypoints: planningWaypoints.map(wp => ({ id: wp.id, lat: wp.lat, lng: wp.lng, name: wp.name })),
       avoidanceZones,
+      geofences,
       reroutedWaypoints: reroutedWaypoints.length > 0 ? reroutedWaypoints.map(wp => ({ lat: wp.lat, lng: wp.lng })) : [],
       active: true,
       estimatedDistance: 0,
@@ -336,8 +349,25 @@ export default function MapCommandCenter() {
         id: `wp-${Date.now()}-${i}`,
         name: `${code}-${i + 1}`
       }));
-      setOriginalWaypoints(prev => [...prev, ...newWPs]);
+
+      // Validate pattern against geofences
+      const filteredWPs = filterWaypointsByGeofences(newWPs, geofences);
+      if (filteredWPs.length < newWPs.length) {
+        toast.error(`Pattern adjusted: ${newWPs.length - filteredWPs.length} waypoints removed/snapped due to geofences.`);
+      }
+
+      setOriginalWaypoints(prev => [...prev, ...filteredWPs.map((wp, i) => ({
+        ...wp,
+        id: `wp-${Date.now()}-${i}`,
+        name: `${code}-${i + 1}`
+      }))]);
       setActivePatternRequest(null);
+      return;
+    }
+
+    // Geofence drawing
+    if (isDrawingGeofence) {
+      setCurrentZonePoints(prev => [...prev, { lat: latlng.lat, lng: latlng.lng }]);
       return;
     }
 
@@ -364,6 +394,25 @@ export default function MapCommandCenter() {
           return;
         }
       } catch { /* fail open */ } finally { setCheckingWater(false); }
+
+      // Validate against geofences
+      const validation = validateWaypointAgainstGeofences(latlng.lat, latlng.lng, geofences);
+      if (!validation.valid) {
+        if (validation.snappedPoint) {
+          toast.info(validation.reason);
+          const newWaypoint: Waypoint = {
+            id: `wp-${Date.now()}`,
+            lat: validation.snappedPoint.lat,
+            lng: validation.snappedPoint.lng,
+            name: `WP${originalWaypoints.length + 1}`,
+          };
+          setOriginalWaypoints(prev => [...prev, newWaypoint]);
+        } else {
+          toast.error(validation.reason);
+        }
+        return;
+      }
+
       // Add mission waypoint (only in mission mode, not during an active mission)
       if (!missionState?.active && !navigationDestination?.set) {
         const newWaypoint: Waypoint = {
@@ -396,6 +445,23 @@ export default function MapCommandCenter() {
       setCurrentZonePoints([]);
       setIsDrawingZone(false);
     }
+
+    if (isDrawingGeofence && currentZonePoints.length >= 1) {
+      const finalPoints = [...currentZonePoints];
+      if (finalPoints.length >= 3) {
+        const newGeofence: Geofence = {
+          id: `geofence-${Date.now()}`,
+          mode: geofenceDrawMode,
+          points: finalPoints,
+          label: `${geofenceDrawMode === 'exclusion' ? 'EXCL' : 'CONT'}-${geofences.length + 1}`,
+          visible: true,
+          active: true
+        };
+        setGeofences(prev => [...prev, newGeofence]);
+      }
+      setCurrentZonePoints([]);
+      setIsDrawingGeofence(false);
+    }
   };
 
   const removeWaypoint = (id: string) => {
@@ -416,8 +482,8 @@ export default function MapCommandCenter() {
   };
 
   return (
-    <div className="relative h-[calc(100vh-4rem)] bg-marine-dark overflow-hidden flex flex-col">
-      <div className="flex-1 relative">
+    <div className="relative w-full h-full bg-marine-dark overflow-hidden flex flex-col">
+      <div className="flex-1 relative overflow-hidden">
         <MapContainer 
           center={[animatedPos.lat, animatedPos.lng]} 
           zoom={14} 
@@ -448,18 +514,73 @@ export default function MapCommandCenter() {
                   iconAnchor: [10, 20]
                 })} 
               />
-              <Polyline 
-                positions={[[animatedPos.lat, animatedPos.lng], [navigationDestination.lat, navigationDestination.lng]]}
-                pathOptions={{ color: '#00a8cc', weight: 2, dashArray: '8, 8', opacity: 0.6 }}
-              />
+              {/* Water-only route path */}
+              {navigationDestination.routePoints?.length > 0 ? (
+                <Polyline 
+                  positions={navigationDestination.routePoints.map((p: any) => [p.lat, p.lng])}
+                  pathOptions={{ color: '#00d4ff', weight: 3, opacity: 0.8, dashArray: '10, 5' }}
+                />
+              ) : (
+                <Polyline 
+                  positions={[[animatedPos.lat, animatedPos.lng], [navigationDestination.lat, navigationDestination.lng]]}
+                  pathOptions={{ color: '#00a8cc', weight: 2, dashArray: '8, 8', opacity: 0.6 }}
+                />
+              )}
             </>
           )}
 
+          {/* Home Port Marker */}
+          {homeLocation?.set && (
+            <Marker
+              position={[homeLocation.lat, homeLocation.lng]}
+              icon={L.divIcon({
+                className: '',
+                html: `<div style="
+                  background: rgba(0,212,255,0.15);
+                  border: 2px solid #00d4ff;
+                  border-radius: 50%;
+                  width: 32px; height: 32px;
+                  display: flex; align-items: center; justify-content: center;
+                  box-shadow: 0 0 12px #00d4ff60;
+                  font-size: 16px;
+                ">🏠</div>`,
+                iconSize: [32, 32],
+                iconAnchor: [16, 16],
+              })}
+            >
+              <Popup className="marine-popup">
+                <div className="text-xs font-mono p-1">
+                  <div className="text-marine-accent font-bold">HOME PORT</div>
+                  <div className="text-white truncate max-w-[120px]">{homeLocation.name}</div>
+                </div>
+              </Popup>
+            </Marker>
+          )}
+
           {/* Mission Waypoints & Path */}
-          <Polyline 
-            positions={activeWaypoints.map(wp => [wp.lat, wp.lng])} 
-            pathOptions={{ color: missionState?.active ? '#00ff9d' : '#00a8cc', weight: 3, lineJoin: 'round', opacity: 0.8 }} 
-          />
+          {missionState?.routePoints?.length > 0 ? (
+            <Polyline 
+              positions={missionState.routePoints.map((p: any) => [p.lat, p.lng])} 
+              pathOptions={{ color: '#00ff9d', weight: 3, opacity: 0.8 }} 
+            />
+          ) : (
+            <Polyline 
+              positions={activeWaypoints.map(wp => [wp.lat, wp.lng])} 
+              pathOptions={{ color: missionState?.active ? '#00ff9d' : '#00a8cc', weight: 3, lineJoin: 'round', opacity: 0.8 }} 
+            />
+          )}
+
+          {/* Current Target Waypoint Marker */}
+          {missionState?.active && missionState.routePoints?.length > 0 && missionState.currentWaypointIndex < missionState.routePoints.length && (
+            <Circle
+              center={[
+                missionState.routePoints[missionState.currentWaypointIndex].lat,
+                missionState.routePoints[missionState.currentWaypointIndex].lng
+              ]}
+              radius={20}
+              pathOptions={{ color: '#00ff9d', fillColor: '#00ff9d', fillOpacity: 0.2, weight: 1 }}
+            />
+          )}
 
           {/* Selected waypoint preview marker (follows editingPos) */}
           {selectedWaypointId && editingPos && (() => {
@@ -523,8 +644,24 @@ export default function MapCommandCenter() {
           {avoidanceZones.filter(z => z.visible).map(zone => (
             <Polygon key={zone.id} positions={zone.points.map(p => [p.lat, p.lng])} pathOptions={{ color: '#ef4444', fillColor: '#ef4444', fillOpacity: 0.3, weight: 2 }} />
           ))}
-          {currentZonePoints.length > 0 && (
-            <Polyline positions={currentZonePoints.map(p => [p.lat, p.lng])} pathOptions={{ color: '#ef4444', weight: 2, dashArray: '5, 5' }} />
+          
+          {/* Geofences */}
+          {geofences.filter(f => f.visible).map(fence => (
+            <Polygon
+              key={fence.id}
+              positions={fence.points.map(p => [p.lat, p.lng])}
+              pathOptions={{
+                color: fence.mode === 'exclusion' ? '#ff3b3b' : '#3b82f6',
+                fillColor: fence.mode === 'exclusion' ? '#ff3b3b' : '#3b82f6',
+                fillOpacity: 0.12,
+                weight: 2,
+                dashArray: fence.mode === 'exclusion' ? '8,4' : '4,4',
+              }}
+            />
+          ))}
+
+          {(currentZonePoints.length > 0) && (
+            <Polyline positions={currentZonePoints.map(p => [p.lat, p.lng])} pathOptions={{ color: isDrawingGeofence ? (geofenceDrawMode === 'exclusion' ? '#ff3b3b' : '#3b82f6') : '#ef4444', weight: 2, dashArray: '5, 5' }} />
           )}
         </MapContainer>
 
@@ -631,6 +768,79 @@ export default function MapCommandCenter() {
                       </div>
                     ))}
                  </div>
+               </Card>
+
+              {/* Geofence Management */}
+              <Card className="bg-black/40 backdrop-blur-xl border-white/10 p-3 shadow-2xl rounded-xl">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-[10px] font-bold text-white/80 uppercase tracking-widest flex items-center gap-1.5">
+                    <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></div>
+                    Geofence Management
+                  </h3>
+                </div>
+
+                <div className="flex gap-2 mb-3">
+                  <button
+                    onClick={() => { 
+                      setIsDrawingZone(false);
+                      setGeofenceDrawMode('exclusion'); 
+                      setIsDrawingGeofence(!isDrawingGeofence || geofenceDrawMode !== 'exclusion'); 
+                    }}
+                    className={`flex-1 py-2 rounded text-[10px] font-mono uppercase border transition-colors flex items-center justify-center gap-1.5
+                      ${geofenceDrawMode === 'exclusion' && isDrawingGeofence
+                        ? 'bg-red-500/20 border-red-500 text-red-400'
+                        : 'border-marine-border text-marine-text-secondary hover:border-red-500/50'}`}
+                  >
+                    <Ban className="w-3 h-3" />
+                    Exclusion
+                  </button>
+                  <button
+                    onClick={() => { 
+                      setIsDrawingZone(false);
+                      setGeofenceDrawMode('containment'); 
+                      setIsDrawingGeofence(!isDrawingGeofence || geofenceDrawMode !== 'containment'); 
+                    }}
+                    className={`flex-1 py-2 rounded text-[10px] font-mono uppercase border transition-colors flex items-center justify-center gap-1.5
+                      ${geofenceDrawMode === 'containment' && isDrawingGeofence
+                        ? 'bg-blue-500/20 border-blue-500 text-blue-400'
+                        : 'border-marine-border text-marine-text-secondary hover:border-blue-500/50'}`}
+                  >
+                    <Fence className="w-3 h-3" />
+                    Containment
+                  </button>
+                </div>
+
+                {isDrawingGeofence && (
+                  <div className="text-[9px] text-blue-300 bg-blue-500/10 p-1.5 rounded border border-blue-500/20 mb-3 font-mono leading-tight">
+                    Click map to draw {geofenceDrawMode} zone. Double-click to finish.
+                  </div>
+                )}
+
+                <div className="space-y-1.5">
+                  {geofences.map((fence, i) => (
+                    <div key={fence.id} className={`flex items-center justify-between px-2 py-1.5 rounded border text-[10px] font-mono
+                      ${fence.mode === 'exclusion' ? 'bg-red-500/10 border-red-500/30' : 'bg-blue-500/10 border-blue-500/30'}`}>
+                      <div className="flex items-center gap-2">
+                        {fence.mode === 'exclusion' ? <Ban className="w-3 h-3 text-red-400" /> : <Fence className="w-3 h-3 text-blue-400" />}
+                        <span className={fence.mode === 'exclusion' ? 'text-red-300' : 'text-blue-300'}>
+                          {fence.label}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <button 
+                          onClick={() => setGeofences(prev => prev.map(f => f.id === fence.id ? { ...f, active: !f.active } : f))}
+                          className={`text-[9px] px-1.5 py-0.5 rounded font-bold transition-colors ${fence.active ? 'bg-green-500/20 text-green-400 border border-green-500/30' : 'bg-white/5 text-marine-text-secondary border border-white/10'}`}>
+                          {fence.active ? 'ON' : 'OFF'}
+                        </button>
+                        <button 
+                          onClick={() => setGeofences(prev => prev.filter(f => f.id !== fence.id))} 
+                          className="text-red-400 hover:text-red-200 p-0.5 transition-colors">
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </Card>
 
               <PatternPresetsPanel 
@@ -667,6 +877,7 @@ export default function MapCommandCenter() {
                       ownerPage: 'mission',
                       waypoints: reroutedWaypoints.length > 0 ? reroutedWaypoints : originalWaypoints,
                       avoidanceZones,
+                      geofences,
                       reroutedWaypoints,
                       active: true,
                       estimatedDistance: planningMetrics.distance,
@@ -809,11 +1020,15 @@ export default function MapCommandCenter() {
           </div>
         )}
 
-        {/* Navigation Mode Panel */}
-        {mapMode === 'navigation' && <NavigationDestinationPanel />}
+        {/* Navigation Mode Panel - Positioned on the left to match Mission Control overlay style */}
+        {mapMode === 'navigation' && (
+          <div className="absolute top-4 left-4 z-[1000] animate-in slide-in-from-left-4 duration-500">
+            <NavigationDestinationPanel />
+          </div>
+        )}
 
         {/* Global HUD Bottom Left */}
-        <div className="absolute bottom-6 left-6 z-[1000] flex flex-col gap-3">
+        <div className="absolute bottom-10 left-10 z-[1000] flex flex-col gap-3">
           <Card className="bg-marine-dark/90 backdrop-blur-md border-marine-border p-3 shadow-2xl overflow-hidden min-w-[220px]">
             <div className="flex items-center gap-3 mb-3 border-b border-marine-border pb-2">
               <div className="p-1.5 bg-marine-accent/10 rounded">
@@ -834,22 +1049,68 @@ export default function MapCommandCenter() {
           </Card>
         </div>
 
-        {/* Navigation Indicator (Bottom Center) - Only if nav set */}
+        {/* Navigation Indicator (Bottom Center) - Redesigned for full visibility */}
         {navigationDestination?.set && (
-          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-[1000]">
-             <Card className="bg-marine-accent/90 backdrop-blur-md border-white/20 px-6 py-2.5 shadow-2xl flex items-center gap-8 rounded-full">
-               <div className="flex flex-col items-center">
-                 <div className="text-[9px] uppercase font-bold text-white/60">Dist Remaining</div>
-                 <div className="text-lg font-bold text-white leading-none">{(navigationDestination.distanceRemaining / 1000).toFixed(2)} km</div>
-               </div>
-               <div className="w-px h-6 bg-white/20" />
-               <div className="flex flex-col items-center">
-                 <div className="text-[9px] uppercase font-bold text-white/60">Arriv. ETA</div>
-                 <div className="text-lg font-bold text-white leading-none">
-                   {new Date(Date.now() + navigationDestination.eta * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                 </div>
-               </div>
-             </Card>
+          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-[1000] flex flex-col items-center gap-2 group">
+             {/* Tactical Circular HUD */}
+             <div className="relative w-56 h-32 flex items-end justify-center overflow-visible">
+                {/* SVG Progress Ring */}
+                <svg className="absolute bottom-0 w-56 h-56 -rotate-90 origin-center translate-y-28">
+                  <circle
+                    cx="112" cy="112" r="100"
+                    fill="none"
+                    stroke="rgba(0,212,255,0.05)"
+                    strokeWidth="16"
+                    strokeDasharray="314"
+                    strokeDashoffset="157"
+                  />
+                  <circle
+                    cx="112" cy="112" r="100"
+                    fill="none"
+                    stroke="#00d4ff"
+                    strokeWidth="16"
+                    strokeDasharray="314"
+                    strokeDashoffset={314 - (Math.min(1, 1 - (navigationDestination.distanceRemaining / 10000)) * 157)}
+                    className="transition-all duration-1000 ease-out"
+                    style={{ filter: 'drop-shadow(0 0 12px #00d4ff)' }}
+                  />
+                </svg>
+                
+                {/* HUD Content Container */}
+                <div className="relative z-10 w-full bg-marine-dark/90 backdrop-blur-3xl border border-marine-accent/40 rounded-t-[112px] p-6 flex flex-col items-center justify-end h-full shadow-[0_-20px_60px_rgba(0,0,0,0.7)]">
+                  <div className="flex flex-col items-center mb-1">
+                    <div className="text-[10px] uppercase font-black text-marine-accent tracking-[0.25em] mb-1.5 opacity-100 animate-pulse">Dist Remaining</div>
+                    <div className="text-3xl font-black text-white leading-none tracking-tighter italic">
+                      {(navigationDestination.distanceRemaining / 1000).toFixed(2)}
+                      <span className="text-sm ml-1 not-italic font-bold text-marine-text-secondary uppercase">km</span>
+                    </div>
+                  </div>
+                  
+                  {/* Secondary Stats Row */}
+                  <div className="flex gap-6 mt-4 pt-3 border-t border-white/10 w-full justify-center">
+                    <div className="flex flex-col items-center">
+                      <div className="text-[9px] uppercase font-bold text-white/40 tracking-widest">Arriv. ETA</div>
+                      <div className="text-sm font-mono font-bold text-white/90">
+                        {new Date(Date.now() + navigationDestination.eta * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </div>
+                    </div>
+                    <div className="w-px h-6 bg-white/10" />
+                    <div className="flex flex-col items-center">
+                      <div className="text-[9px] uppercase font-bold text-white/40 tracking-widest">Net Speed</div>
+                      <div className="text-sm font-mono font-bold text-white/90">{(sensorData.gnss.speed || 0).toFixed(1)} <span className="text-[9px]">KTS</span></div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Decorative Crosshair Elements */}
+                <div className="absolute top-0 left-1/2 -translate-x-px w-[2px] h-6 bg-marine-accent shadow-[0_0_10px_#00d4ff]" />
+             </div>
+             
+             {/* Target Label Bubble */}
+             <div className="px-5 py-2 bg-marine-accent/20 backdrop-blur-xl border border-marine-accent/40 rounded-full text-[10px] font-bold text-marine-accent shadow-2xl flex items-center gap-2.5 translate-y-3">
+                <Navigation2 className="w-3.5 h-3.5 fill-marine-accent" />
+                <span className="tracking-widest">TRANSIENT TO: <span className="text-white">{navigationDestination.name.toUpperCase()}</span></span>
+             </div>
           </div>
         )}
       </div>
@@ -873,31 +1134,61 @@ export default function MapCommandCenter() {
         </div>
       )}
 
-      {/* Command Authority Overlay (New Logic) */}
+      {/* Command Authority Overlay (Redesigned) */}
       {(missionState?.active || navigationDestination?.set) && (
-        <div className="absolute top-6 left-1/2 -translate-x-1/2 z-[2000] animate-in fade-in duration-500">
-          <div className={`flex items-center gap-4 px-6 py-2.5 rounded-full border backdrop-blur-xl shadow-[0_0_30px_rgba(0,0,0,0.4)] ${
-            missionState?.active ? 'bg-green-500/10 border-green-500/40 text-green-400' : 'bg-marine-accent/10 border-marine-accent/40 text-marine-accent'
-          }`}>
-            <div className={`flex items-center gap-2 font-bold tracking-widest text-[11px] uppercase`}>
-              <div className={`w-2 h-2 rounded-full animate-pulse ${missionState?.active ? 'bg-green-500' : 'bg-marine-accent'}`} />
-              {missionState?.active ? 'Mission Command Active' : 'Navigation Authority Active'}
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[2000] animate-in slide-in-from-top-6 duration-700 ease-out">
+          <div className="relative group">
+            {/* Background Glow */}
+            <div className={`absolute -inset-1 rounded-full blur-md opacity-25 transition-opacity group-hover:opacity-40 ${
+              missionState?.active ? 'bg-green-500' : 'bg-marine-accent'
+            }`} />
+            
+            <div className={`relative flex items-center gap-6 px-8 py-3 rounded-full border border-white/10 backdrop-blur-2xl shadow-[0_0_50px_rgba(0,0,0,0.6)] overflow-hidden ${
+              missionState?.active ? 'bg-green-500/10' : 'bg-marine-accent/10'
+            }`}>
+              {/* Animated Scanline */}
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full animate-[shimmer_3s_infinite]" />
+              
+              <div className="flex items-center gap-3">
+                <div className="relative">
+                  <div className={`w-3 h-3 rounded-full animate-ping absolute inset-0 ${missionState?.active ? 'bg-green-500/50' : 'bg-marine-accent/50'}`} />
+                  <div className={`relative w-3 h-3 rounded-full shadow-[0_0_10px_currentColor] ${missionState?.active ? 'bg-green-500 text-green-500' : 'bg-marine-accent text-marine-accent'}`} />
+                </div>
+                <div className="flex flex-col">
+                  <span className={`text-[10px] font-black tracking-[0.25em] uppercase leading-none mb-1 ${missionState?.active ? 'text-green-400' : 'text-marine-accent'}`}>
+                    {missionState?.active ? 'Mission Command' : 'Navigation Authority'}
+                  </span>
+                  <span className="text-[10px] font-bold text-white/40 tracking-tighter uppercase leading-none">System Active • Secure Link</span>
+                </div>
+              </div>
+
+              <div className="w-px h-8 bg-white/10" />
+
+              <div className="flex flex-col max-w-[300px]">
+                <div className="text-[9px] font-bold text-white/50 uppercase tracking-widest mb-1">Current Objective</div>
+                <div className="text-xs font-mono font-bold text-white flex items-center gap-2 truncate">
+                  <ChevronRight className={`w-3 h-3 flex-shrink-0 ${missionState?.active ? 'text-green-400' : 'text-marine-accent'}`} />
+                  <span className="truncate">
+                    {missionState?.active ? `WP ${missionState.currentWaypointIndex + 1} OF ${missionState.waypoints.length}` : navigationDestination.name.toUpperCase()}
+                  </span>
+                </div>
+              </div>
+
+              <div className="w-px h-8 bg-white/10" />
+
+              <Button 
+                size="sm" 
+                variant="ghost" 
+                className="h-10 px-4 text-[11px] font-black uppercase tracking-widest hover:bg-red-500/20 text-white/50 hover:text-red-400 border border-white/5 hover:border-red-500/30 transition-all rounded-full group/btn"
+                onClick={() => {
+                  if (missionState?.active) contextStopMission('mission');
+                  else sendCommand({ type: 'CLEAR_NAVIGATION_DESTINATION', vesselId: 'V001' });
+                }}
+              >
+                <Square className="w-3.5 h-3.5 mr-2 group-hover/btn:scale-110 transition-transform" />
+                Terminate
+              </Button>
             </div>
-            <div className="w-px h-4 bg-white/10" />
-            <div className="text-[10px] font-mono text-white/70">
-              {missionState?.active ? `Executing WP ${missionState.currentWaypointIndex + 1}/${missionState.waypoints.length}` : `Transit to: ${navigationDestination.name}`}
-            </div>
-            <Button 
-              size="sm" 
-              variant="ghost" 
-              className="h-6 px-2 text-[10px] hover:bg-white/10 text-white/50"
-              onClick={() => {
-                if (missionState?.active) contextStopMission('mission');
-                else sendCommand({ type: 'CLEAR_NAVIGATION_DESTINATION', vesselId: 'V001' });
-              }}
-            >
-              <X className="w-3 h-3 mr-1" /> Terminate
-            </Button>
           </div>
         </div>
       )}

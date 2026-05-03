@@ -58,8 +58,9 @@ function computeNavETA(gnss) {
   const speedMs = Math.max((gnss.speed || 5) * 0.51444, 0.1);
   return {
     ...navDest,
-    distanceRemaining: +dist.toFixed(0),
-    eta: +(dist / speedMs).toFixed(0),
+    distanceRemaining: gnss.distanceRemaining ?? +dist.toFixed(0),
+    eta: gnss.etaSeconds ?? +(dist / speedMs).toFixed(0),
+    routePoints: gnss.routePoints || [],
   };
 }
 
@@ -169,10 +170,11 @@ function broadcastParentUpdate(vesselId) {
     active:                mission.active,
     ownerPage:             mission.ownerPage,
     waypoints:             mission.waypoints,
+    routePoints:           gnss.routePoints || [],
     currentWaypointIndex:  mission.currentWaypointIndex,
     completedWaypoints:    mission.completedWaypoints,
-    eta:                   mission.eta,
-    distanceRemaining:     mission.distanceRemaining,
+    eta:                   gnss.etaSeconds ?? mission.eta,
+    distanceRemaining:     gnss.distanceRemaining ?? mission.distanceRemaining,
   } : null;
 
   const navigationDestination = computeNavETA(gnss);

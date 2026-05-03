@@ -4,6 +4,7 @@ import { Card } from '../app/components/ui/card';
 import { Ship, Activity, MapPin, AlertCircle } from 'lucide-react';
 import { Badge } from '../app/components/ui/badge';
 import { NotificationFeed } from '../app/components/NotificationFeed';
+import { AttitudeIndicator } from '../app/components/AttitudeIndicator';
 
 function SensorLED({ active, delayed, error, ping }: { active: boolean, delayed?: boolean, error?: boolean, ping?: boolean }) {
   const color = error ? 'bg-red-500' : delayed ? 'bg-amber-500' : active ? 'bg-green-500' : 'bg-marine-border';
@@ -41,6 +42,8 @@ export default function FleetOverview() {
               longitude: sensorData.gnss.longitude,
               speed: sensorData.gnss.speed,
               heading: sensorData.gnss.heading,
+              pitch: sensorData.gnss.pitch || 0,
+              roll: sensorData.gnss.roll || 0,
             };
           }
           return v;
@@ -163,6 +166,53 @@ export default function FleetOverview() {
                   <div className="flex flex-col items-center">
                     <span className="text-[10px] text-marine-text-secondary mb-1">RADAR</span>
                     <SensorLED active={sensorData.radar.status === 'ACTIVE' || sensorData.radar.status === 'active'} ping />
+                  </div>
+                </div>
+
+                {/* Tactical Attitude Telemetry System */}
+                <div className="mt-6 pt-6 border-t border-marine-border">
+                  <div className="flex items-center gap-2 mb-4">
+                    <div className="w-1.5 h-1.5 rounded-full bg-marine-accent animate-pulse" />
+                    <h4 className="text-[10px] font-black text-marine-text-secondary uppercase tracking-[0.2em]">Vessel Attitude & Stability</h4>
+                  </div>
+                  
+                  <div className="flex flex-col items-center w-full max-w-4xl mx-auto mt-6">
+                    <div className="flex flex-col md:flex-row items-center justify-center gap-12 lg:gap-24 w-full">
+                      {/* Left: Pitch Data */}
+                      <div className="flex flex-col items-center md:items-end gap-1 text-center md:text-right">
+                        <span className="text-[10px] font-bold text-marine-text-secondary uppercase tracking-widest">Pitch</span>
+                        <span className="text-4xl font-mono font-black text-marine-accent drop-shadow-[0_0_8px_rgba(45,212,191,0.3)]">
+                          {(sensorData.gnss.pitch || 0).toFixed(1)}°
+                        </span>
+                        <span className="text-[10px] text-marine-text-secondary uppercase font-semibold mt-1 bg-marine-dark/50 px-2 py-0.5 rounded-full border border-marine-border">
+                          {(sensorData.gnss.pitch || 0) > 0 ? 'Bow Up' : 'Bow Down'}
+                        </span>
+                      </div>
+
+                      {/* Center: Artificial Horizon */}
+                      <div className="flex-shrink-0 relative">
+                        <AttitudeIndicator pitch={sensorData.gnss.pitch || 0} roll={sensorData.gnss.roll || 0} size={220} />
+                        
+                        {/* Integrated Yaw (Heading) below dial */}
+                        <div className="absolute -bottom-14 left-1/2 -translate-x-1/2 flex flex-col items-center bg-marine-dark/80 backdrop-blur-sm border border-marine-border rounded-xl px-6 py-2 shadow-lg">
+                           <span className="text-[9px] font-bold text-marine-text-secondary uppercase tracking-widest mb-0.5">Yaw (Heading)</span>
+                           <span className="text-xl font-mono font-black text-marine-accent">{(sensorData.gnss.heading || 0).toFixed(1)}°</span>
+                        </div>
+                      </div>
+
+                      {/* Right: Roll Data */}
+                      <div className="flex flex-col items-center md:items-start gap-1 text-center md:text-left">
+                        <span className="text-[10px] font-bold text-marine-text-secondary uppercase tracking-widest">Roll</span>
+                        <span className="text-4xl font-mono font-black text-marine-accent drop-shadow-[0_0_8px_rgba(45,212,191,0.3)]">
+                          {(sensorData.gnss.roll || 0).toFixed(1)}°
+                        </span>
+                        <span className="text-[10px] text-marine-text-secondary uppercase font-semibold mt-1 bg-marine-dark/50 px-2 py-0.5 rounded-full border border-marine-border">
+                          {(sensorData.gnss.roll || 0) > 0 ? 'Stbd Heel' : 'Port Heel'}
+                        </span>
+                      </div>
+                    </div>
+                    {/* Extra spacing to account for the absolute positioned Yaw box */}
+                    <div className="h-16 w-full"></div>
                   </div>
                 </div>
               </div>

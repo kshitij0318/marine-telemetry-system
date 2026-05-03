@@ -1,5 +1,6 @@
 import React from 'react';
 import { Outlet } from 'react-router';
+import { Toaster } from 'sonner';
 import { Sidebar } from '../app/components/Sidebar';
 import { Header } from '../app/components/Header';
 import { SensorBar } from '../app/components/SensorBar';
@@ -13,6 +14,7 @@ import { HTML5Backend } from 'react-dnd-html5-backend';
 export default function Root() {
   return (
     <ThemeProvider>
+      <Toaster position="top-right" richColors />
       <TelemetryProvider>
         <MissionProvider>
           <DndProvider backend={HTML5Backend}>

@@ -9,6 +9,8 @@ export interface SensorData {
     heading: number;
     speed: number;
     course: number;
+    pitch?: number;
+    roll?: number;
     satellites: number;
     hdop: number;
     fixType?: string;
@@ -100,6 +102,8 @@ export function useLiveTelemetry() {
       heading: 0,
       speed: 0,
       course: 0,
+      pitch: 0,
+      roll: 0,
       satellites: 0,
       hdop: 0,
       fixType: 'N/A',
@@ -209,6 +213,8 @@ export function useLiveTelemetry() {
                 heading: state.gnss?.heading !== undefined ? (prev.gnss.heading + shortestAngleDelta(prev.gnss.heading, state.gnss.heading) * 0.08 + 360) % 360 : prev.gnss.heading,
                 speed: state.gnss?.speed !== undefined ? prev.gnss.speed + (state.gnss.speed - prev.gnss.speed) * 0.08 : prev.gnss.speed,
                 course: state.gnss?.course ?? prev.gnss.course,
+                pitch: state.gnss?.pitch !== undefined ? (prev.gnss.pitch || 0) + (state.gnss.pitch - (prev.gnss.pitch || 0)) * 0.15 : prev.gnss.pitch,
+                roll: state.gnss?.roll !== undefined ? (prev.gnss.roll || 0) + (state.gnss.roll - (prev.gnss.roll || 0)) * 0.15 : prev.gnss.roll,
                 satellites: state.gnss?.satellites ?? prev.gnss.satellites,
                 hdop: state.gnss?.hdop ?? prev.gnss.hdop,
                 fixType: state.gnss?.fixType ?? prev.gnss.fixType,

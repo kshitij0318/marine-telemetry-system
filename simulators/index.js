@@ -10,8 +10,8 @@ const vesselId = process.env.VESSEL_ID || "V001";
 
 // Feature 8: Start position driven by env vars — relocate simulation anywhere.
 // Set VESSEL_START_LAT / VESSEL_START_LNG to move the ship to any coordinate.
-const START_LAT = parseFloat(process.env.VESSEL_START_LAT || "18.9000");
-const START_LNG = parseFloat(process.env.VESSEL_START_LNG || "72.6500");
+const START_LAT = 18.9000;
+const START_LNG = 72.5000;
 
 const shipState = require("./shipState");
 const waterRouter = require("./waterRouter");
@@ -24,7 +24,7 @@ client.on("connect", () => {
 
   // The master physics tick
   setInterval(() => {
-    shipState.masterTick(null, null); // We will inject waterRouter and pathSplitter in later phases
+    shipState.masterTick(waterRouter, pathSplitter); 
   }, 100);
 
   // Core Command Handlers
@@ -39,6 +39,7 @@ client.on("connect", () => {
           shipState.missionOwner = cmd.ownerPage || "mission";
           shipState.waypoints = cmd.waypoints || [];
           shipState.avoidanceZones = cmd.avoidanceZones || [];
+          shipState.geofences = cmd.geofences || [];
           shipState.currentWaypointIndex = 0;
           shipState.missionActive = true;
           

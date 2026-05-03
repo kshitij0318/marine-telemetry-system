@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useRef } from 'react';
-import { Search, MapPin, CheckCircle, Loader, X, Navigation } from 'lucide-react';
+import { Search, MapPin, CheckCircle, Loader, X, Navigation, Home, Anchor, Square } from 'lucide-react';
 import { Button } from './ui/button';
+import { Card } from './ui/card';
 import { useTelemetry } from '../../contexts/TelemetryContext';
 import { useMission } from '../../contexts/MissionContext';
 
@@ -17,6 +18,17 @@ export function NavigationDestinationPanel() {
   const [results, setResults] = useState<any[]>([]);
   const [error, setError] = useState('');
   const [confirmed, setConfirmed] = useState(false);
+  const [navTab, setNavTab] = useState<'text' | 'coords' | 'home'>('text');
+  const [homeLocation, setHomeLocation] = useState<{
+    lat: number;
+    lng: number;
+    name: string;
+    set: boolean;
+  } | null>(() => {
+    const saved = localStorage.getItem('marineTelemetry_homeLocation');
+    return saved ? JSON.parse(saved) : null;
+  });
+  const [homeInputMode, setHomeInputMode] = useState<'text' | 'coords'>('text');
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const clearDestination = () => {
@@ -128,72 +140,219 @@ export function NavigationDestinationPanel() {
     setQuery(name); // Show destination name in input
   };
 
+  const handleSetHome = (result: any) => {
+    const loc = {
+      lat: parseFloat(result.lat),
+      lng: parseFloat(result.lon),
+      name: result.display_name.split(',')[0],
+      set: true
+    };
+    setHomeLocation(loc);
+    localStorage.setItem('marineTelemetry_homeLocation', JSON.stringify(loc));
+    setResults([]);
+  };
+
+  const startNavigationTo = (lat: number, lng: number, name: string) => {
+    sendCommand({
+      type: 'SET_NAVIGATION_DESTINATION',
+      vesselId: 'V001',
+      payload: { lat, lng, name }
+    });
+    stopMission('mission');
+    setConfirmed(true);
+    setQuery(name);
+  };
+
   // If destination is active, show the confirmed state
   if (navigationDestination?.set) {
     return (
-      <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-marine-dark/90 backdrop-blur-md p-4 rounded-xl border border-marine-accent z-[1000] shadow-lg flex items-center gap-4">
-        <CheckCircle className="w-5 h-5 text-marine-accent animate-pulse" />
-        <div>
-          <div className="text-xs text-marine-text-secondary">Destination Set</div>
-          <div className="text-sm text-marine-text font-semibold">{navigationDestination.name}</div>
-          <div className="text-xs text-marine-text-secondary font-mono">
-            {navigationDestination.lat.toFixed(4)}°, {navigationDestination.lng.toFixed(4)}°
+      <Card className="w-80 bg-marine-dark/90 backdrop-blur-md border-marine-border p-4 shadow-2xl flex flex-col gap-4 overflow-hidden">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-bold text-marine-text tracking-tight uppercase">Navigation Control</h3>
+          <div className="flex items-center gap-1.5">
+            <div className="w-2 h-2 rounded-full bg-marine-accent animate-pulse" />
+            <span className="text-[10px] font-mono text-marine-accent">LINK ACTIVE</span>
           </div>
         </div>
-        <Button size="sm" variant="destructive" onClick={clearDestination} className="ml-4 h-8">
-          <X className="w-4 h-4 mr-1" /> Clear
-        </Button>
-      </div>
+
+        <div className="space-y-4">
+          <Button 
+            variant="destructive"
+            className="w-full font-bold py-6 text-base tracking-widest uppercase shadow-lg shadow-red-500/10 transition-all active:scale-[0.98]"
+            onClick={clearDestination}
+          >
+            <Square className="w-5 h-5 mr-2" /> Terminate Nav
+          </Button>
+
+          <div className="p-3 bg-marine-surface/50 border border-marine-accent/20 rounded-lg space-y-2">
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 bg-marine-accent/10 rounded">
+                <Anchor className="w-4 h-4 text-marine-accent" />
+              </div>
+              <div>
+                <div className="text-[9px] font-bold text-marine-text-secondary uppercase">Target Destination</div>
+                <div className="text-sm font-bold text-marine-text truncate">{navigationDestination.name}</div>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2 pt-2 border-t border-white/5 font-mono text-[10px]">
+              <div className="text-marine-text-secondary">{navigationDestination.lat.toFixed(6)}°N</div>
+              <div className="text-marine-text-secondary text-right">{navigationDestination.lng.toFixed(6)}°E</div>
+            </div>
+          </div>
+        </div>
+      </Card>
     );
   }
 
   return (
-    <div className="absolute top-4 left-1/2 -translate-x-1/2 w-96 bg-marine-dark/90 backdrop-blur-md rounded-xl border border-marine-border z-[1000] shadow-lg overflow-hidden flex flex-col">
-      <div className="flex items-center gap-2 px-3 pt-3 pb-2 border-b border-marine-border">
-        <Navigation className="w-4 h-4 text-marine-accent" />
-        <span className="text-xs font-semibold text-marine-text-secondary uppercase tracking-wider">Set Navigation Destination</span>
+    <Card className="w-80 bg-marine-dark/90 backdrop-blur-md border-marine-border p-4 shadow-2xl flex flex-col gap-4 overflow-hidden">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-bold text-marine-text tracking-tight uppercase">Navigation Control</h3>
+        <div className="flex items-center gap-1.5">
+          <div className="w-2 h-2 rounded-full bg-marine-text-secondary" />
+          <span className="text-[10px] font-mono text-marine-text-secondary">READY</span>
+        </div>
       </div>
 
-      <div className="flex bg-marine-surface border-b border-marine-border">
-        <button className={`flex-1 p-2 text-xs font-semibold ${mode === 'text' ? 'text-marine-accent bg-marine-dark' : 'text-marine-text-secondary'}`} onClick={() => setMode('text')}>Location</button>
-        <button className={`flex-1 p-2 text-xs font-semibold ${mode === 'coords' ? 'text-marine-accent bg-marine-dark' : 'text-marine-text-secondary'}`} onClick={() => setMode('coords')}>Coordinates</button>
+      <div className="flex bg-marine-surface/50 p-1 rounded-lg border border-marine-border">
+        <button 
+          className={`flex-1 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded transition-all ${navTab === 'text' ? 'bg-marine-accent text-marine-dark shadow-lg' : 'text-marine-text-secondary hover:text-marine-text'}`} 
+          onClick={() => setNavTab('text')}
+        >
+          Location
+        </button>
+        <button 
+          className={`flex-1 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded transition-all ${navTab === 'coords' ? 'bg-marine-accent text-marine-dark shadow-lg' : 'text-marine-text-secondary hover:text-marine-text'}`} 
+          onClick={() => setNavTab('coords')}
+        >
+          Coords
+        </button>
+        <button 
+          className={`flex-1 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded transition-all ${navTab === 'home' ? 'bg-marine-accent text-marine-dark shadow-lg' : 'text-marine-text-secondary hover:text-marine-text'}`} 
+          onClick={() => setNavTab('home')}
+        >
+          Home
+        </button>
       </div>
 
-      <div className="p-3 flex gap-2">
-        {mode === 'text' ? (
-          <input
-            type="text"
-            className="flex-1 bg-marine-surface border border-marine-border rounded px-3 py-1.5 text-sm text-marine-text outline-none focus:border-marine-accent"
-            placeholder="e.g. Port of Long Beach"
-            value={query}
-            onChange={e => handleQueryChange(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && handleSearch()}
-          />
+      <div className="space-y-3">
+        {navTab === 'home' ? (
+          <div className="space-y-3">
+            {homeLocation?.set ? (
+              <div className="p-3 bg-marine-surface border border-marine-accent/30 rounded-lg group transition-all hover:border-marine-accent">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <Home className="w-4 h-4 text-marine-accent" />
+                    <span className="text-xs font-bold text-marine-text">Home Port</span>
+                  </div>
+                  <button onClick={() => { setHomeLocation(null); localStorage.removeItem('marineTelemetry_homeLocation'); }}
+                    className="text-[9px] text-red-400 hover:text-red-300 font-bold uppercase tracking-tighter opacity-0 group-hover:opacity-100 transition-opacity">
+                    Reset
+                  </button>
+                </div>
+                <div className="text-xs text-marine-accent font-mono font-bold truncate mb-1">{homeLocation.name}</div>
+                <div className="text-[10px] text-marine-text-secondary font-mono">
+                  {homeLocation.lat.toFixed(4)}°N  {homeLocation.lng.toFixed(4)}°E
+                </div>
+                <Button
+                  onClick={() => startNavigationTo(homeLocation.lat, homeLocation.lng, homeLocation.name)}
+                  className="w-full mt-3 bg-marine-accent/20 border border-marine-accent/30 hover:bg-marine-accent/30 text-marine-accent font-bold text-[11px] uppercase tracking-widest h-10"
+                >
+                  Return to Home
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <div className="text-[9px] text-marine-text-secondary font-bold uppercase tracking-widest">
+                  Configure Home Station
+                </div>
+                <div className="flex gap-1">
+                  <button onClick={() => setHomeInputMode('text')}
+                    className={`flex-1 py-1 rounded text-[9px] font-bold border transition-colors uppercase
+                      ${homeInputMode === 'text' ? 'bg-marine-accent/20 border-marine-accent text-marine-accent' : 'border-marine-border text-marine-text-secondary hover:border-white/20'}`}>
+                    Name
+                  </button>
+                  <button onClick={() => setHomeInputMode('coords')}
+                    className={`flex-1 py-1 rounded text-[9px] font-bold border transition-colors uppercase
+                      ${homeInputMode === 'coords' ? 'bg-marine-accent/20 border-marine-accent text-marine-accent' : 'border-marine-border text-marine-text-secondary hover:border-white/20'}`}>
+                    Coords
+                  </button>
+                </div>
+
+                <div className="flex gap-2">
+                  {homeInputMode === 'text' ? (
+                    <input
+                      type="text"
+                      className="flex-1 bg-marine-surface border border-marine-border rounded px-3 py-2 text-xs text-marine-text outline-none focus:border-marine-accent/50 transition-all"
+                      placeholder="Search port name..."
+                      value={query}
+                      onChange={e => handleQueryChange(e.target.value)}
+                    />
+                  ) : (
+                    <div className="flex gap-1 flex-1">
+                      <input type="number" placeholder="LAT" className="w-1/2 bg-marine-surface border border-marine-border rounded px-2 py-2 text-[10px] text-marine-text outline-none focus:border-marine-accent/50" value={lat} onChange={e => setLat(e.target.value)} />
+                      <input type="number" placeholder="LNG" className="w-1/2 bg-marine-surface border border-marine-border rounded px-2 py-2 text-[10px] text-marine-text outline-none focus:border-marine-accent/50" value={lng} onChange={e => setLng(e.target.value)} />
+                    </div>
+                  )}
+                  <Button size="icon" onClick={handleSearch} disabled={loading} className="w-10 h-10 shrink-0">
+                    {loading ? <Loader className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
         ) : (
-          <div className="flex gap-2 flex-1">
-            <input type="number" placeholder="Lat" className="w-1/2 bg-marine-surface border border-marine-border rounded px-2 py-1.5 text-sm text-marine-text outline-none focus:border-marine-accent" value={lat} onChange={e => setLat(e.target.value)} />
-            <input type="number" placeholder="Lng" className="w-1/2 bg-marine-surface border border-marine-border rounded px-2 py-1.5 text-sm text-marine-text outline-none focus:border-marine-accent" value={lng} onChange={e => setLng(e.target.value)} />
+          <div className="space-y-3">
+             <div className="text-[9px] text-marine-text-secondary font-bold uppercase tracking-widest">
+               Search Navigational Target
+             </div>
+             <div className="flex gap-2">
+              {navTab === 'text' ? (
+                <input
+                  type="text"
+                  className="flex-1 bg-marine-surface border border-marine-border rounded px-3 py-2 text-xs text-marine-text outline-none focus:border-marine-accent/50 transition-all"
+                  placeholder="e.g. Mumbai Port..."
+                  value={query}
+                  onChange={e => handleQueryChange(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleSearch()}
+                />
+              ) : (
+                <div className="flex gap-1 flex-1">
+                  <input type="number" placeholder="LAT" className="w-1/2 bg-marine-surface border border-marine-border rounded px-2 py-2 text-[10px] text-marine-text outline-none focus:border-marine-accent/50" value={lat} onChange={e => setLat(e.target.value)} />
+                  <input type="number" placeholder="LNG" className="w-1/2 bg-marine-surface border border-marine-border rounded px-2 py-2 text-[10px] text-marine-text outline-none focus:border-marine-accent/50" value={lng} onChange={e => setLng(e.target.value)} />
+                </div>
+              )}
+              <Button size="icon" onClick={handleSearch} disabled={loading} className="w-10 h-10 shrink-0">
+                {loading ? <Loader className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+              </Button>
+            </div>
           </div>
         )}
-        <Button size="icon" onClick={handleSearch} disabled={loading} className="w-9 h-9">
-          {loading ? <Loader className="w-4 h-4 animate-spin text-white" /> : <Search className="w-4 h-4" />}
-        </Button>
       </div>
 
       {error && (
-        <div className="px-3 pb-3 text-xs text-red-400 font-mono">{error}</div>
+        <div className="p-2 bg-red-500/10 border border-red-500/20 rounded text-[10px] text-red-400 font-mono animate-in fade-in slide-in-from-top-1">
+          {error}
+        </div>
       )}
 
       {results.length > 0 && (
-        <div className="max-h-48 overflow-y-auto border-t border-marine-border bg-marine-dark">
+        <div className="max-h-48 overflow-y-auto border border-marine-border rounded-lg bg-marine-surface/30 custom-scrollbar mt-1">
           {results.map((r, i) => (
-            <div key={i} className="p-2 border-b border-marine-border/50 hover:bg-marine-surface cursor-pointer flex items-center gap-3 transition-colors" onClick={() => handleSelect(r)}>
-              <MapPin className="w-4 h-4 text-marine-accent flex-shrink-0" />
-              <div className="text-xs text-marine-text truncate" title={r.display_name}>{r.display_name}</div>
+            <div key={i} className="p-2.5 border-b border-marine-border/50 hover:bg-marine-accent/5 cursor-pointer flex items-center justify-between transition-all group" onClick={() => navTab === 'home' ? handleSetHome(r) : handleSelect(r)}>
+              <div className="flex items-center gap-3 truncate">
+                <div className="p-1.5 bg-white/5 rounded transition-colors group-hover:bg-marine-accent/20">
+                  <MapPin className="w-3.5 h-3.5 text-marine-text-secondary group-hover:text-marine-accent" />
+                </div>
+                <div className="text-[11px] text-marine-text truncate font-medium" title={r.display_name}>{r.display_name.split(',')[0]}</div>
+              </div>
+              {navTab === 'home' && (
+                <button className="text-[8px] font-black bg-marine-accent/20 text-marine-accent px-1.5 py-0.5 rounded border border-marine-accent/30 opacity-0 group-hover:opacity-100 transition-opacity">SET</button>
+              )}
             </div>
           ))}
         </div>
       )}
-    </div>
+    </Card>
   );
 }

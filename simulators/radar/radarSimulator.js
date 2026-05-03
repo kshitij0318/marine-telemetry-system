@@ -22,20 +22,20 @@ const RADAR_CONFIG = {
 };
 
 const WORLD_TARGETS = [
-  // Close proximity, various speeds
-  { id: "BUOY-A", lat: 18.9250, lng: 72.8350, speedMps: 0, course: 0, type: "NAV_MARK" },
-  { id: "BUOY-B", lat: 18.9150, lng: 72.8400, speedMps: 0, course: 0, type: "NAV_MARK" },
-  { id: "BUOY-C", lat: 18.9200, lng: 72.8250, speedMps: 0, course: 0, type: "NAV_MARK" },
-  { id: "VESSEL-1", lat: 18.9280, lng: 72.8300, speedMps: 8.5, course: 135, type: "MERCHANT" },
-  { id: "VESSEL-2", lat: 18.9100, lng: 72.8500, speedMps: 12.0, course: 315, type: "MERCHANT" },
-  { id: "FISHING-1", lat: 18.9230, lng: 72.8450, speedMps: 2.0, course: 45, type: "FISHING" },
-  { id: "FISHING-2", lat: 18.9180, lng: 72.8300, speedMps: 3.0, course: 90, type: "FISHING" },
-  { id: "FERRY-1", lat: 18.9300, lng: 72.8400, speedMps: 15.0, course: 180, type: "FERRY" },
-  { id: "PATROL-1", lat: 18.9150, lng: 72.8200, speedMps: 20.0, course: 75, type: "MILITARY" },
-  { id: "YACHT-1", lat: 18.9200, lng: 72.8550, speedMps: 6.0, course: 220, type: "LEISURE" },
-  { id: "VESSEL-3", lat: 18.9050, lng: 72.8300, speedMps: 10.0, course: 10, type: "MERCHANT" },
-  { id: "FISHING-3", lat: 18.9350, lng: 72.8250, speedMps: 2.5, course: 110, type: "FISHING" },
-  { id: "TUG-1", lat: 18.9220, lng: 72.8420, speedMps: 4.0, course: 260, type: "MERCHANT" }
+  // Cluster around 18.90, 72.50 (Open Sea - Clear West of Mumbai)
+  { id: "BUOY-A", lat: 18.9050, lng: 72.5050, speedMps: 0, course: 0, type: "NAV_MARK" },
+  { id: "BUOY-B", lat: 18.8950, lng: 72.5100, speedMps: 0, course: 0, type: "NAV_MARK" },
+  { id: "BUOY-C", lat: 18.9000, lng: 72.4950, speedMps: 0, course: 0, type: "NAV_MARK" },
+  { id: "VESSEL-1", lat: 18.9080, lng: 72.5000, speedMps: 8.5, course: 135, type: "MERCHANT" },
+  { id: "VESSEL-2", lat: 18.8900, lng: 72.5200, speedMps: 12.0, course: 315, type: "MERCHANT" },
+  { id: "FISHING-1", lat: 18.9030, lng: 72.5150, speedMps: 2.0, course: 45, type: "FISHING" },
+  { id: "FISHING-2", lat: 18.8980, lng: 72.5000, speedMps: 3.0, course: 90, type: "FISHING" },
+  { id: "FERRY-1", lat: 18.9100, lng: 72.5100, speedMps: 15.0, course: 180, type: "FERRY" },
+  { id: "PATROL-1", lat: 18.8950, lng: 72.4900, speedMps: 20.0, course: 75, type: "MILITARY" },
+  { id: "YACHT-1", lat: 18.9000, lng: 72.5250, speedMps: 6.0, course: 220, type: "LEISURE" },
+  { id: "VESSEL-3", lat: 18.8850, lng: 72.5000, speedMps: 10.0, course: 10, type: "MERCHANT" },
+  { id: "FISHING-3", lat: 18.9150, lng: 72.4950, speedMps: 2.5, course: 110, type: "FISHING" },
+  { id: "TUG-1", lat: 18.9020, lng: 72.5120, speedMps: 4.0, course: 260, type: "MERCHANT" }
 ];
 
 function calculateDistance(lat1, lon1, lat2, lon2) {

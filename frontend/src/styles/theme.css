@@ -296,6 +296,11 @@
   100% { transform: rotate(360deg); }
 }
 
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
 .shadow-marine-glow {
   box-shadow: 0 0 10px var(--marine-accent), 0 0 20px var(--marine-accent);
 }

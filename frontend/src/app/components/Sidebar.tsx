@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router';
-import { Ship, Map, Satellite, Droplet, Waves, Fan, Radio, Settings } from 'lucide-react';
+import { Ship, Map, Satellite, Droplet, Waves, Fan, Radio, Settings, Package } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
 
 interface NavItem {
@@ -17,6 +17,7 @@ const navItems: NavItem[] = [
   { icon: Waves, label: 'Current Meter', path: '/current-meter' },
   { icon: Fan, label: 'Thruster', path: '/thruster' },
   { icon: Radio, label: 'Radar', path: '/radar' },
+  { icon: Package, label: 'Payload', path: '/payload' },
   { icon: Settings, label: 'Settings', path: '/settings' },
 ];
 

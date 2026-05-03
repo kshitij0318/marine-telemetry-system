@@ -45,6 +45,8 @@ module.exports = {
           heading: +state.heading.toFixed(2),
           course: +((state.heading + Math.sin(now / 5000) * 2 + 360) % 360).toFixed(2),
           speed: +state.speed.toFixed(2),
+          pitch: +state.pitch.toFixed(2),
+          roll: +state.roll.toFixed(2),
           satellites,
           hdop: +hdop.toFixed(2),
           signalQuality,
@@ -53,6 +55,9 @@ module.exports = {
           // Include mission state for synchronization
           missionActive: state.missionActive,
           currentWaypointIndex: state.currentWaypointIndex,
+          routePoints: state.routePoints || [],
+          distanceRemaining: state.distanceRemaining,
+          etaSeconds: state.etaSeconds,
         };
         client.publish(dataTopic, JSON.stringify(payload));
       }
