@@ -1,0 +1,55 @@
+version: '3.8'
+
+services:
+  mqtt:
+    image: eclipse-mosquitto:2.0
+    container_name: mts_mqtt
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - ./infrastructure/mqtt/mosquitto.conf:/mosquitto/config/mosquitto.conf
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: mts_backend
+    depends_on:
+      - mqtt
+    ports:
+      - "5001:5001"
+    environment:
+      - MQTT_BROKER_URL=mqtt://mqtt:1883
+      - PORT=5001
+    restart: unless-stopped
+
+  simulators:
+    build:
+      context: .
+      dockerfile: simulators/Dockerfile
+    container_name: mts_simulators
+    depends_on:
+      - mqtt
+      - backend
+    environment:
+      - MQTT_BROKER_URL=mqtt://mqtt:1883
+      - VESSEL_ID=V001
+      - VESSEL_START_LAT=18.9000
+      - VESSEL_START_LNG=72.5000
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # Pass the backend's exposed port via localhost if accessed on the host machine
+        - VITE_WS_URL=ws://localhost:5001
+    container_name: mts_frontend
+    depends_on:
+      - backend
+    ports:
+      - "3000:80"
+    restart: unless-stopped

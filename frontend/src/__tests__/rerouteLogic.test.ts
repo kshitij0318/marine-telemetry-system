@@ -20,10 +20,8 @@ describe('computeReroutedPath', () => {
   };
 
   it('should insert exactly 2 waypoints when a segment crosses a zone (Feature 2)', () => {
-    // The segment (0,0) -> (2,2) crosses the zone centered at (1,1)
     const result = computeReroutedPath(waypoints, [zone]);
     
-    // Original 2 + 2 detour = 4
     expect(result.newPath.length).toBe(4);
     expect(result.modifiedWPsCount).toBe(2);
     expect(result.newPath[1].name).toBe('REROUTE_A');
@@ -53,21 +51,15 @@ describe('computeReroutedPath', () => {
 
     const result = computeReroutedPath(waypoints, [zone, zone2]);
     
-    // Since our logic picks the FIRST colliding zone per segment, 
-    // it should only detour for the first one it hits if they represent the same segment collision.
-    // In our implementation, it detours once per segment if ANY zone hits.
     expect(result.newPath.length).toBe(4); 
   });
 
   it('should work when adding zone before waypoints (Feature 3)', () => {
-    // Stage 1: Add zone
     const zones = [zone];
-    // Stage 2: Add first waypoint
     let wps: Waypoint[] = [waypoints[0]];
     let result = computeReroutedPath(wps, zones);
     expect(result.newPath.length).toBe(1);
 
-    // Stage 3: Add second waypoint
     wps = [...waypoints];
     result = computeReroutedPath(wps, zones);
     expect(result.newPath.length).toBe(4); // Rerouted!

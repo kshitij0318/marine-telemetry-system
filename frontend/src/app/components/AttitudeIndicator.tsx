@@ -8,11 +8,8 @@ interface AttitudeIndicatorProps {
 }
 
 export function AttitudeIndicator({ pitch, roll, yaw, size = 160 }: AttitudeIndicatorProps) {
-  // Clamp values for display limits
   const displayPitch = Math.max(-45, Math.min(45, pitch));
   
-  // Scale factor: how many pixels per degree of pitch
-  // Let's say 45 degrees covers half the gauge radius
   const pitchScale = (size / 2) / 45; 
   const yOffset = displayPitch * pitchScale;
 

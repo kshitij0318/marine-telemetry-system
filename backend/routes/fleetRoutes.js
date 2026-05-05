@@ -5,7 +5,6 @@ const aggregationService = require('../services/aggregationService');
 router.get('/', (req, res) => {
   try {
     const states = aggregationService.getAllAggregatedStates();
-    // Convert object to array and ensure active state structure
     const fleet = Object.keys(states).map(vesselId => ({
       id: vesselId,
       name: vesselId === 'MV-001' ? 'Research Vessel Alpha' : 

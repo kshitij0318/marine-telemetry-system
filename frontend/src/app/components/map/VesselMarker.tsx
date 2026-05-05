@@ -9,10 +9,8 @@ export const VesselMarker = React.memo(() => {
   const { sensorData } = useTelemetry();
   const dataRef = useRef(sensorData);
   
-  // Sync ref without re-render
   useEffect(() => { dataRef.current = sensorData; }, [sensorData]);
   
-  // Create once
   useEffect(() => {
     const icon = L.divIcon({
       className: '',
@@ -24,14 +22,12 @@ export const VesselMarker = React.memo(() => {
       iconAnchor: [10, 17],
     });
     
-    // Initial position, will be immediately overwritten by the first interval tick
     markerRef.current = L.marker([18.9220, 72.8347], {icon, zIndexOffset: 1000}).addTo(map);
     return () => { 
         if (markerRef.current) markerRef.current.remove(); 
     };
   }, [map]);
   
-  // Update imperatively at 10fps — no React re-render
   useEffect(() => {
     const interval = setInterval(() => {
       const {latitude, longitude, heading} = dataRef.current.gnss || {};
@@ -41,7 +37,6 @@ export const VesselMarker = React.memo(() => {
       
       const el = markerRef.current.getElement();
       if (el) {
-          // Adjust rotation cleanly
           const currentTransform = el.style.transform;
           const rotateMatch = currentTransform.match(/rotate\([^)]+\)/);
           const newTransform = currentTransform.replace(/rotate\([^)]+\)/, '') + ` rotate(${Math.round(heading)}deg)`;

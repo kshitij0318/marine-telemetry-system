@@ -3,7 +3,8 @@ const deviceRegistryService = require("./deviceRegistryService");
 const aggregationService = require("./aggregationService");
 const socketServer = require("../websocket/socketServer");
 
-const client = mqtt.connect("mqtt://localhost:1883");
+const MQTT_URL = process.env.MQTT_BROKER_URL || "mqtt://localhost:1883";
+const client = mqtt.connect(MQTT_URL);
 
 client.on("connect", () => {
   console.log("MQTT Subscriber connected");
@@ -16,7 +17,6 @@ client.on("reconnect", () => {
 
 client.on("error", (err) => {
   console.error("MQTT Subscriber Error:", err.message);
-  // Do not exit; allow automatic retries
 });
 
 client.on("close", () => {

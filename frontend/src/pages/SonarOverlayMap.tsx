@@ -23,7 +23,6 @@ export const SonarDisplay = () => {
       ctx.fillStyle = '#0a0f1e';
       ctx.fillRect(0, 0, W, H);
 
-      // Range rings
       [0.25, 0.5, 0.75, 1.0].forEach(f => {
         ctx.beginPath();
         ctx.arc(cx, cy, R * f, 0, Math.PI * 2);
@@ -35,14 +34,12 @@ export const SonarDisplay = () => {
         ctx.fillText(`${(dataRef.current.radar.range * f).toFixed(0)}m`, cx + R*f + 4, cy);
       });
 
-      // Cross hairs
       ctx.strokeStyle = 'rgba(0,212,255,0.15)';
       ctx.setLineDash([4,4]);
       ctx.beginPath(); ctx.moveTo(cx, cy-R); ctx.lineTo(cx, cy+R); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(cx-R, cy); ctx.lineTo(cx+R, cy); ctx.stroke();
       ctx.setLineDash([]);
 
-      // Sweep
       sweepRef.current = (sweepRef.current + 1.2) % 360;
       const sweepRad = (sweepRef.current - 90) * Math.PI / 180;
       const grad = ctx.createLinearGradient(cx, cy,
@@ -56,7 +53,6 @@ export const SonarDisplay = () => {
       ctx.fillStyle = grad;
       ctx.fill();
 
-      // Targets
       const targets = dataRef.current.radar.targets ?? [];
       targets.forEach((target: any) => {
         const angle = (target.bearingDeg - 90) * Math.PI / 180;
@@ -82,7 +78,6 @@ export const SonarDisplay = () => {
         ctx.fillText(`${target.rangem.toFixed(0)}m`, dx + 8, dy - 4);
       });
 
-      // Vessel dot center
       ctx.beginPath();
       ctx.arc(cx, cy, 5, 0, Math.PI * 2);
       ctx.fillStyle = '#00d4ff';

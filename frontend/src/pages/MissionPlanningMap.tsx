@@ -49,7 +49,6 @@ export function renderMissionPlanningMap({
   rerouteAnimation
 }: MissionMapProps) {
   
-  // Avoidance zones (all modes actually, according to original source it draws in all modes if visible)
   avoidanceZones.forEach(zone => {
     if (zone.visible && zone.points.length > 2) {
       ctx.beginPath();
@@ -68,7 +67,6 @@ export function renderMissionPlanningMap({
       ctx.stroke();
       ctx.setLineDash([]);
       
-      // Warning icon in center
       const centerX = zone.points.reduce((sum, p) => sum + latLngToCanvas(p.lat, p.lng).x, 0) / zone.points.length;
       const centerY = zone.points.reduce((sum, p) => sum + latLngToCanvas(p.lat, p.lng).y, 0) / zone.points.length;
       
@@ -80,7 +78,6 @@ export function renderMissionPlanningMap({
     }
   });
 
-  // Current zone being drawn
   if (isDrawingZone && currentZonePoints.length > 0) {
     ctx.beginPath();
     const firstPoint = latLngToCanvas(currentZonePoints[0].lat, currentZonePoints[0].lng);
@@ -95,7 +92,6 @@ export function renderMissionPlanningMap({
     ctx.stroke();
     ctx.setLineDash([]);
     
-    // Draw points
     currentZonePoints.forEach(point => {
       const pos = latLngToCanvas(point.lat, point.lng);
       ctx.beginPath();
@@ -105,7 +101,6 @@ export function renderMissionPlanningMap({
     });
   }
 
-  // Breadcrumb trail (Mission mode)
   if (isMissionActive && breadcrumbTrail.length > 0) {
     breadcrumbTrail.forEach((point, index) => {
       const pos = latLngToCanvas(point.lat, point.lng);
@@ -118,11 +113,9 @@ export function renderMissionPlanningMap({
     });
   }
 
-  // Route line with rerouting animation
   if (waypoints.length > 0) {
     const routeColor = mapMode === 'tactical' ? '#00ff41' : '#00d4ff';
     
-    // Original route (faded if rerouting)
     ctx.strokeStyle = rerouteAnimation.status === 'rerouting' ? 'rgba(148, 163, 184, 0.3)' : routeColor;
     ctx.lineWidth = 3;
     ctx.setLineDash(rerouteAnimation.status === 'rerouting' ? [5, 5] : []);
@@ -138,7 +131,6 @@ export function renderMissionPlanningMap({
     ctx.stroke();
     ctx.setLineDash([]);
     
-    // Rerouted path (if active)
     if (rerouteAnimation.status === 'rerouting' && waypoints.length > 0 && avoidanceZones.length > 0) {
       ctx.strokeStyle = routeColor;
       ctx.lineWidth = 3;
@@ -146,7 +138,6 @@ export function renderMissionPlanningMap({
       ctx.beginPath();
       ctx.moveTo(vesselPosRoute.x, vesselPosRoute.y);
       
-      // Draw bezier curve around first avoidance zone
       const firstZone = avoidanceZones[avoidanceZones.length - 1];
       if (firstZone && firstZone.points.length > 0) {
         const zoneCenter = {
@@ -156,7 +147,6 @@ export function renderMissionPlanningMap({
         
         const firstWp = latLngToCanvas(waypoints[0].lat, waypoints[0].lng);
         
-        // Control points for bezier curve
         const cp1x = vesselPosRoute.x + (zoneCenter.x - vesselPosRoute.x) * 0.5 - 50;
         const cp1y = vesselPosRoute.y + (zoneCenter.y - vesselPosRoute.y) * 0.5 - 50;
         const cp2x = firstWp.x - (firstWp.x - zoneCenter.x) * 0.5 + 50;
@@ -174,7 +164,6 @@ export function renderMissionPlanningMap({
     }
   }
 
-  // Waypoints
   waypoints.forEach((wp) => {
     const pos = latLngToCanvas(wp.lat, wp.lng);
     const color = mapMode === 'tactical' ? '#00ff41' : '#00d4ff';
@@ -207,7 +196,6 @@ export function renderMissionPlanningMap({
   });
 }
 
-// MapCommandCenter will render the Mission Planning HUD natively as part of its side panel.
 export default function MissionPlanningMap() {
   return null;
 }

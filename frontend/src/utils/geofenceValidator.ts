@@ -1,11 +1,7 @@
-// ── Geofence validation utility ───────────────────────────────────────────────
-// Uses @turf/turf (already installed) for all polygon geometry.
-// No external APIs — fully offline, runs in browser.
 
 import * as turf from '@turf/turf';
 import { Geofence } from '../types/geofence';
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
 
 /** Returns true if point is inside the polygon */
 export function isPointInsidePolygon(
@@ -39,7 +35,6 @@ export function snapToGeofenceBoundary(
     const nearest = turf.nearestPointOnLine(boundary as any, pt);
     return { lat: nearest.geometry.coordinates[1], lng: nearest.geometry.coordinates[0] };
   } catch {
-    // Fallback: return centroid if geometry fails
     return computeCentroid(polygonPoints);
   }
 }
@@ -58,14 +53,12 @@ export function snapInsideGeofence(
 ): { lat: number; lng: number } {
   const snapped = snapToGeofenceBoundary(lat, lng, polygonPoints);
   const centroid = computeCentroid(polygonPoints);
-  // Nudge 5% toward centroid to guarantee inside
   return {
     lat: snapped.lat + (centroid.lat - snapped.lat) * 0.05,
     lng: snapped.lng + (centroid.lng - snapped.lng) * 0.05,
   };
 }
 
-// ── Validation ────────────────────────────────────────────────────────────────
 
 export type WaypointValidationResult =
   | { valid: true }
@@ -115,10 +108,8 @@ export function filterWaypointsByGeofences(
     if (result.valid) {
       acc.push(wp);
     } else if ('snappedPoint' in result && result.snappedPoint) {
-      // Containment: use snapped point
       acc.push(result.snappedPoint);
     }
-    // Exclusion: skip point entirely
     return acc;
   }, []);
 }

@@ -1,7 +1,3 @@
-// ── Notification Engine ───────────────────────────────────────────────────────
-// Evaluates thresholds every 1000ms and emits structured Alert objects.
-// Alerts have cooldown windows to prevent spam.
-// Called from socketServer on the 1000ms loop; returns alerts[] to attach to WS payload.
 
 const ALERT_COOLDOWNS = {}; // { alertId: lastEmittedTimestamp }
 
@@ -32,7 +28,6 @@ function checkAndEmitAlerts(aggregatedState, missionState) {
   const radar = aggregatedState?.radar;
   const ctd = aggregatedState?.ctd;
 
-  // ── Mission status alerts ──────────────────────────────────────────────────
   if (missionState?.active) {
     const remaining = missionState?.waypoints?.length - missionState?.currentWaypointIndex || 0;
     emit('mission-active', 30000, {
@@ -44,7 +39,6 @@ function checkAndEmitAlerts(aggregatedState, missionState) {
     });
   }
 
-  // ── Thruster alerts ────────────────────────────────────────────────────────
   if (thruster) {
     const maxTemp = thruster.tempWarningThreshold || 85;
     if (thruster.temperature > maxTemp) {
@@ -76,7 +70,6 @@ function checkAndEmitAlerts(aggregatedState, missionState) {
     }
   }
 
-  // ── GNSS alerts ────────────────────────────────────────────────────────────
   if (gnss?.satellites !== undefined) {
     if (gnss.satellites < 5) {
       emit('gnss-degraded', 30000, {
@@ -106,7 +99,6 @@ function checkAndEmitAlerts(aggregatedState, missionState) {
     }
   }
 
-  // ── Radar alerts ─────────────────────────────────────────────────────────────
   if (radar?.detections) {
     const highThreats = radar.detections.filter(d => d.threat === 'high');
     if (highThreats.length > 0) {
@@ -121,7 +113,6 @@ function checkAndEmitAlerts(aggregatedState, missionState) {
     }
   }
 
-  // ── CTD depth change alert ─────────────────────────────────────────────────
   if (ctd) {
     if (!checkAndEmitAlerts._prevDepth) checkAndEmitAlerts._prevDepth = ctd.depth;
     const depthDelta = Math.abs(ctd.depth - checkAndEmitAlerts._prevDepth);

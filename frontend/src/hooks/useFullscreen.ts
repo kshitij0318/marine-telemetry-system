@@ -1,5 +1,3 @@
-// ── useFullscreen hook ────────────────────────────────────────────────────────
-// Wraps the browser Fullscreen API. Esc key exits automatically via native behavior.
 import { useState, useCallback, useEffect } from 'react';
 
 export function useFullscreen() {

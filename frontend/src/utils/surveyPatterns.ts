@@ -9,7 +9,6 @@ function degPerMeterLng(lat: number) {
   return 1 / (111320 * Math.cos((lat * Math.PI) / 180));
 }
 
-// Offset a point by dx meters east, dy meters north
 function offsetPoint(origin: { lat: number; lng: number }, dx: number, dy: number) {
   return {
     lat: origin.lat + dy * DEG_PER_METER_LAT,
@@ -17,7 +16,6 @@ function offsetPoint(origin: { lat: number; lng: number }, dx: number, dy: numbe
   };
 }
 
-// Rotate a 2D point around origin by angle (radians)
 function rotate2D(x: number, y: number, angle: number) {
   return {
     x: x * Math.cos(angle) - y * Math.sin(angle),
@@ -25,7 +23,6 @@ function rotate2D(x: number, y: number, angle: number) {
   };
 }
 
-// PATTERN 1 — Lawnmower (parallel track)
 export function generateLawnmower(params: {
   center: { lat: number; lng: number };
   widthM: number; // total survey width in meters
@@ -45,7 +42,6 @@ export function generateLawnmower(params: {
     const x1 = leftward ? -widthM / 2 : widthM / 2;
     const x2 = leftward ? widthM / 2 : -widthM / 2;
 
-    // Rotate endpoints by heading angle
     const p1 = rotate2D(x1, yOffset, angle);
     const p2 = rotate2D(x2, yOffset, angle);
 
@@ -55,7 +51,6 @@ export function generateLawnmower(params: {
   return waypoints;
 }
 
-// PATTERN 2 — Spiral (Archimedean)
 export function generateSpiral(params: {
   center: { lat: number; lng: number };
   maxRadiusM: number;
@@ -78,7 +73,6 @@ export function generateSpiral(params: {
   return waypoints;
 }
 
-// PATTERN 3 — Expanding Square
 export function generateExpandingSquare(params: {
   center: { lat: number; lng: number };
   stepM: number;
@@ -111,7 +105,6 @@ export function generateExpandingSquare(params: {
   return waypoints;
 }
 
-// PATTERN 4 — Radial (Sector)
 export function generateRadial(params: {
   center: { lat: number; lng: number };
   maxRadiusM: number;
@@ -131,7 +124,6 @@ export function generateRadial(params: {
   return waypoints;
 }
 
-// PATTERN 5 — Crosshatch
 export function generateCrosshatch(params: {
   center: { lat: number; lng: number };
   widthM: number;

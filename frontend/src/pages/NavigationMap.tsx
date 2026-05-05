@@ -20,7 +20,6 @@ export function renderNavigationMap({
 }: MapRendererProps) {
   const vesselPos = latLngToCanvas(vesselPosition.lat, vesselPosition.lng);
 
-  // Depth contour lines (simulated)
   const depthContours = [10, 20, 30, 40, 50];
   depthContours.forEach((depth, index) => {
     const offset = index * 80;
@@ -40,13 +39,11 @@ export function renderNavigationMap({
     ctx.lineWidth = 1;
     ctx.stroke();
     
-    // Depth label
     ctx.fillStyle = 'rgba(0, 212, 255, 0.5)';
     ctx.font = '10px monospace';
     ctx.fillText(`${depth}m`, vesselPos.x + 150 + offset, vesselPos.y);
   });
 
-  // Wind/current vector arrows (overlaid at grid points)
   for (let x = 100; x < width; x += 150) {
     for (let y = 100; y < height; y += 150) {
       const angle = ((sensorData.currentMeter.direction - 90) * Math.PI) / 180;
@@ -75,7 +72,6 @@ export function renderNavigationMap({
     }
   }
 
-  // Scale bar (bottom right)
   const scaleX = width - 150;
   const scaleY = height - 30;
   const scaleLength = 100;
@@ -98,7 +94,6 @@ export function renderNavigationMap({
   ctx.font = '11px monospace';
   ctx.fillText('100m', scaleX + scaleLength / 2 - 20, scaleY + 20);
 
-  // Compass rose (top right)
   const compassX = width - 60;
   const compassY = 60;
   const compassRadius = 40;
@@ -106,14 +101,12 @@ export function renderNavigationMap({
   ctx.save();
   ctx.translate(compassX, compassY);
   
-  // Circle
   ctx.beginPath();
   ctx.arc(0, 0, compassRadius, 0, 2 * Math.PI);
   ctx.strokeStyle = '#00d4ff';
   ctx.lineWidth = 2;
   ctx.stroke();
   
-  // Cardinal directions
   ctx.font = '12px monospace';
   ctx.fillStyle = '#00d4ff';
   ctx.textAlign = 'center';
@@ -123,7 +116,6 @@ export function renderNavigationMap({
   ctx.fillText('E', compassRadius + 15, 0);
   ctx.fillText('W', -compassRadius - 15, 0);
   
-  // Heading indicator
   ctx.rotate(((sensorData.gnss.heading - 90) * Math.PI) / 180);
   ctx.beginPath();
   ctx.moveTo(0, -compassRadius + 5);

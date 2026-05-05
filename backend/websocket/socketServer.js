@@ -5,11 +5,9 @@ const { checkAndEmitAlerts } = require("../services/notificationEngine");
 let wss;
 let latestAlerts = []; // Rolling cache of last emitted alerts
 
-// ── Global state (backend is single source of truth) ─────────────────────────
 const missions = {}; // { vesselId: MissionState }
 let navDest = null;  // { lat, lng, name, set: true }
 
-// ── Geo helpers ───────────────────────────────────────────────────────────────
 function haversine(lat1, lon1, lat2, lon2) {
   const R = 6371e3;
   const φ1 = lat1 * Math.PI / 180, φ2 = lat2 * Math.PI / 180;
@@ -18,15 +16,12 @@ function haversine(lat1, lon1, lat2, lon2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-// ── Compute mission ETA/remaining ─────────────────────────────────────────────
 function computeMissionETA(mission, gnss) {
   if (!gnss || !mission || !mission.waypoints || !mission.waypoints.length) return;
   
-  // SYNC: Use the waypoint index reported by the simulator if available
   const idx = gnss.currentWaypointIndex !== undefined ? gnss.currentWaypointIndex : mission.currentWaypointIndex;
   mission.currentWaypointIndex = idx;
   
-  // SYNC: Update active status from simulator
   if (gnss.missionActive !== undefined) {
     mission.active = gnss.missionActive;
   }
@@ -51,7 +46,6 @@ function computeMissionETA(mission, gnss) {
   mission.distanceRemaining = distRemaining;
 }
 
-// ── Compute navigation-destination ETA ───────────────────────────────────────
 function computeNavETA(gnss) {
   if (!navDest || !gnss) return null;
   const dist = haversine(gnss.latitude, gnss.longitude, navDest.lat, navDest.lng);
@@ -64,7 +58,6 @@ function computeNavETA(gnss) {
   };
 }
 
-// ── WebSocket server ──────────────────────────────────────────────────────────
 function init(server) {
   wss = new WebSocket.Server({ server });
 
@@ -76,7 +69,6 @@ function init(server) {
         const cmd = JSON.parse(msg);
         if (!cmd || !cmd.type) return;
 
-        // Resolve Circular Dependency: require inside handler
         const mqttClient = require("../services/mqttSubscriberService");
 
         if (cmd.type === "START_MISSION") {
@@ -138,21 +130,18 @@ function init(server) {
     ws.on("close", () => console.log("WebSocket client disconnected"));
   });
 
-  // ── Notification engine 1Hz loop ──────────────────────────────────────────
   setInterval(() => {
     const vesselId = 'V001';
     const state = aggregationService.getAggregatedState(vesselId);
     const mission = missions[vesselId] || null;
     const newAlerts = checkAndEmitAlerts(state, mission);
     if (newAlerts.length > 0) {
-      // Merge into rolling cache, cap at 100
       latestAlerts = [...newAlerts, ...latestAlerts].slice(0, 100);
       broadcastParentUpdate(vesselId);
     }
   }, 1000);
 }
 
-// ── Broadcast telemetry update to all clients ─────────────────────────────────
 function broadcastParentUpdate(vesselId) {
   if (!wss || !vesselId) return;
   const state = aggregationService.getAggregatedState(vesselId);
@@ -161,7 +150,6 @@ function broadcastParentUpdate(vesselId) {
   const gnss = state.gnss || null;
   const mission = missions[vesselId] || null;
   
-  // Synchronize mission analytics with simulator feedback
   if (mission && gnss) {
     computeMissionETA(mission, gnss);
   }

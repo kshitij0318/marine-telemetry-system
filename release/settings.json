@@ -1,0 +1,7 @@
+{
+  "notificationsEnabled": true,
+  "soundAlerts": true,
+  "radarAlerts": true,
+  "sessionTimeout": "30",
+  "apiKey": "MTS-DEV-KTTQGNED"
+}

@@ -25,7 +25,6 @@ export function ShipDiagram({ selectedCamera, onSelectCamera, threatsByPosition 
   };
 
   const drawFovArc = (centerAngle: number, fov: number, radius: number = 80) => {
-    // Math in SVG: 0 is top, 90 is right. We need to convert to standard cartesian where -90 is top.
     const startAngle = (centerAngle - fov / 2 - 90) * Math.PI / 180;
     const endAngle = (centerAngle + fov / 2 - 90) * Math.PI / 180;
 
@@ -72,7 +71,6 @@ export function ShipDiagram({ selectedCamera, onSelectCamera, threatsByPosition 
 
         {/* Cameras */}
         {Object.values(OAS_SENSORS).map((sensor) => {
-          // Calculate camera node placement exactly on the hull edge
           let r = 30; // approx distance from center
           if (sensor.position === 'bow') r = 80;
           else if (sensor.position === 'stern') r = 80;

@@ -9,7 +9,6 @@ import {
 import { Card } from '../app/components/ui/card';
 import { OAS_SENSORS } from '../types/oasSensors';
 
-// ── Ship Diagram ───────────────────────────────────────────────────────────────
 function ShipDiagram({
   activeSensorId,
   onSensorClick,
@@ -19,7 +18,6 @@ function ShipDiagram({
   onSensorClick: (id: string) => void;
   detectionCounts: Record<string, number>;
 }) {
-  // Positions of camera buttons around ship diagram (normalized 0-1)
   const CAM_POS: Record<string, { x: number; y: number }> = {
     'OAS-CAM-1': { x: 0.5, y: 0.05 },   // Bow (top)
     'OAS-CAM-2': { x: 0.85, y: 0.25 },  // Stbd Bow
@@ -76,7 +74,6 @@ function ShipDiagram({
   );
 }
 
-// ── Deployment Log Entry ───────────────────────────────────────────────────────
 interface LogEntry {
   id: string;
   time: string;
@@ -84,7 +81,6 @@ interface LogEntry {
   note: string;
 }
 
-// ── Main Component ─────────────────────────────────────────────────────────────
 export default function PayloadDashboard() {
   const { sensorData } = useTelemetry();
   const [activeCamId, setActiveCamId] = useState<string>('OAS-CAM-1');
@@ -92,7 +88,6 @@ export default function PayloadDashboard() {
 
   const oasSensorData: any[] = sensorData.radar?.oasSensors ?? [];
 
-  // Build detection counts per sensor
   const detectionCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     oasSensorData.forEach((s: any) => {

@@ -8,31 +8,33 @@ import { WelcomeBanner } from '../app/components/WelcomeBanner';
 import { ThemeProvider } from '../contexts/ThemeContext';
 import { TelemetryProvider } from '../contexts/TelemetryContext';
 import { MissionProvider } from '../contexts/MissionContext';
+import { SettingsProvider } from '../contexts/SettingsContext';
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 
 export default function Root() {
   return (
     <ThemeProvider>
-      <Toaster position="top-right" richColors />
-      <TelemetryProvider>
-        <MissionProvider>
-          <DndProvider backend={HTML5Backend}>
-            <div className="flex h-screen bg-marine-dark overflow-hidden">
-              <Sidebar />
-              <div className="flex-1 flex flex-col min-w-0 ml-16">
-                <Header />
-                <SensorBar />
-                <main className="flex-1 overflow-auto relative custom-scrollbar">
-                  <Outlet />
-                </main>
+      <SettingsProvider>
+        <Toaster position="top-right" richColors />
+        <TelemetryProvider>
+          <MissionProvider>
+            <DndProvider backend={HTML5Backend}>
+              <div className="flex h-screen bg-marine-dark overflow-hidden">
+                <Sidebar />
+                <div className="flex-1 flex flex-col min-w-0 ml-16">
+                  <Header />
+                  <SensorBar />
+                  <main className="flex-1 overflow-auto relative custom-scrollbar">
+                    <Outlet />
+                  </main>
+                </div>
+                <WelcomeBanner />
               </div>
-              <WelcomeBanner />
-            </div>
-          </DndProvider>
-        </MissionProvider>
-      </TelemetryProvider>
+            </DndProvider>
+          </MissionProvider>
+        </TelemetryProvider>
+      </SettingsProvider>
     </ThemeProvider>
-
   );
 }

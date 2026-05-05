@@ -51,7 +51,6 @@ export function NavigationDestinationPanel() {
       if (mode === 'text') {
         if (query.trim().length < 3) throw new Error('Search query too short');
         
-        // Serialized search to respect Nominatim 1-req/sec rate limits
         const searchTerms = [query];
         if (!portKeywords.some(k => query.toLowerCase().includes(k))) {
           searchTerms.push(`${query} port`);
@@ -63,14 +62,12 @@ export function NavigationDestinationPanel() {
             const r = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(term)}&format=json&limit=5&extratags=1`)
               .then(res => res.json());
             if (Array.isArray(r)) consolidated.push(...r);
-            // Small delay to ensure we are not rate-limited
             if (searchTerms.length > 1) await new Promise(resolve => setTimeout(resolve, 300));
           } catch (e) {
             console.error('Port search partial failure:', e);
           }
         }
         
-        // Remove duplicates based on lat/lng
         const unique = consolidated.filter((v, i, a) => a.findIndex(t => t.lat === v.lat && t.lon === v.lon) === i);
 
         const filtered = unique.filter((res: any) => {
@@ -112,7 +109,6 @@ export function NavigationDestinationPanel() {
     }
   }, [loading, mode, query, lat, lng]);
 
-  // Debounced search trigger for text mode
   const handleQueryChange = (val: string) => {
     setQuery(val);
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -132,7 +128,6 @@ export function NavigationDestinationPanel() {
       payload: { lat: destLat, lng: destLng, name }
     });
 
-    // MUTUAL EXCLUSION: Nav overrides Mission
     stopMission('mission');
 
     setResults([]);
@@ -163,7 +158,6 @@ export function NavigationDestinationPanel() {
     setQuery(name);
   };
 
-  // If destination is active, show the confirmed state
   if (navigationDestination?.set) {
     return (
       <Card className="w-80 bg-marine-dark/90 backdrop-blur-md border-marine-border p-4 shadow-2xl flex flex-col gap-4 overflow-hidden">

@@ -10,7 +10,6 @@ describe('isOnWater', () => {
   global.fetch = vi.fn();
 
   it('should return true for open ocean (Feature 4)', async () => {
-    // Mock Nominatim "Unable to geocode" error for open ocean
     (fetch as any).mockResolvedValue({
       ok: true,
       json: () => Promise.resolve({ error: "Unable to geocode" }),

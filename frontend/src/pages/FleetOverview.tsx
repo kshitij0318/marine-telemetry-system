@@ -25,14 +25,12 @@ export default function FleetOverview() {
   const [error, setError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
-    // Poll the backend REST API for fleet overview mapping
     const fetchFleet = async () => {
       try {
         const response = await fetch('http://localhost:5001/api/fleet');
         if (!response.ok) throw new Error('Failed to fetch fleet data');
         const data = await response.json();
         
-        // Inject live sensorData for V001 right into the fleet mapping if active
         const enriched = data.map((v: any) => {
           if (v.id === 'V001' && sensorData) {
             return {

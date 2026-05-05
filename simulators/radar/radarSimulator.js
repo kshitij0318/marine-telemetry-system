@@ -1,17 +1,6 @@
 const topics = require("../../shared/constants/topics");
 
-// FIELD AUDIT — RADAR
-// Field               | Backend emits | Frontend reads | Match? | Action
-// targets             | Yes           | Yes            | Yes    | Replaces detections
-// rotationAngle       | Yes           | Yes            | Yes    | New
-// range               | Yes           | Yes            | Yes    | None
-// config              | Yes           | Yes            | Yes    | Updated for X-band
-// performance         | Yes           | Yes            | Yes    | Match verified
-// statistics          | Yes           | Yes            | Yes    | None
-// status              | Yes           | Yes            | Yes    | None
-// suggestedManeuver   | Yes           | Yes            | Yes    | New
 
-// Typical X-band marine radar config
 const RADAR_CONFIG = {
   operatingRange: 3000, // meters
   frequency: 9.4, // GHz
@@ -22,7 +11,6 @@ const RADAR_CONFIG = {
 };
 
 const WORLD_TARGETS = [
-  // Cluster around 18.90, 72.50 (Open Sea - Clear West of Mumbai)
   { id: "BUOY-A", lat: 18.9050, lng: 72.5050, speedMps: 0, course: 0, type: "NAV_MARK" },
   { id: "BUOY-B", lat: 18.8950, lng: 72.5100, speedMps: 0, course: 0, type: "NAV_MARK" },
   { id: "BUOY-C", lat: 18.9000, lng: 72.4950, speedMps: 0, course: 0, type: "NAV_MARK" },
@@ -66,26 +54,21 @@ function destPoint(lat, lng, bearingDeg, distanceM) {
 }
 
 function computeCPA(shipState, target) {
-  // Convert lat/lng to local metric grid (x, y)
-  // Ship is at origin (0,0)
   const dist = calculateDistance(shipState.lat, shipState.lng, target.lat, target.lng);
   const brg = calculateBearing(shipState.lat, shipState.lng, target.lat, target.lng) * Math.PI / 180;
   const targetX = dist * Math.sin(brg);
   const targetY = dist * Math.cos(brg);
 
-  // Ship velocity vector
   const shipSpeedMps = shipState.speed || 0;
   const shipHdg = (shipState.heading || 0) * Math.PI / 180;
   const shipVx = shipSpeedMps * Math.sin(shipHdg);
   const shipVy = shipSpeedMps * Math.cos(shipHdg);
 
-  // Target velocity vector
   const tgtSpeed = target.speedMps;
   const tgtCourse = target.course * Math.PI / 180;
   const tgtVx = tgtSpeed * Math.sin(tgtCourse);
   const tgtVy = tgtSpeed * Math.cos(tgtCourse);
 
-  // Relative position and velocity
   const relX = targetX;
   const relY = targetY;
   const relVx = tgtVx - shipVx;
@@ -93,14 +76,12 @@ function computeCPA(shipState, target) {
 
   const vRelSq = relVx * relVx + relVy * relVy;
   if (vRelSq < 0.001) {
-    // Relative speeds are too similar
     return { cpa: dist, tcpa: 0 };
   }
 
   const tcpa = -(relX * relVx + relY * relVy) / vRelSq;
   
   if (tcpa < 0) {
-    // Target is moving away
     return { cpa: dist, tcpa: 0 };
   }
 
@@ -140,7 +121,6 @@ module.exports = {
       sessionSeconds: 0
     };
 
-    // Deep copy targets to allow independent updates
     const activeTargets = JSON.parse(JSON.stringify(WORLD_TARGETS));
 
     shipState.on('tick', (state) => {
@@ -149,10 +129,8 @@ module.exports = {
       lastSimTime = now;
       tickCount++;
 
-      // Update radar rotation (24 RPM = 144 deg/sec)
       rotationAngle = (rotationAngle + 144 * dt) % 360;
 
-      // Update target positions
       activeTargets.forEach(t => {
         if (t.speedMps > 0) {
           const p = destPoint(t.lat, t.lng, t.course, t.speedMps * dt);
@@ -166,11 +144,9 @@ module.exports = {
       let recommendedManeuver = null;
       let highestRiskScore = -1;
 
-      // Radar processing logic
       activeTargets.forEach(t => {
         const dist = calculateDistance(state.lat, state.lng, t.lat, t.lng);
         
-        // Range Hysteresis: prevent flickering at the 3000m edge
         const inRangePrev = t._smooth?.inRange ?? false;
         const inRange = inRangePrev 
           ? dist < RADAR_CONFIG.operatingRange + 50 // Buffer to keep
@@ -186,15 +162,11 @@ module.exports = {
 
         const { cpa, tcpa } = computeCPA(state, t);
 
-        // Collision Risk Index (0 to 1)
-        // High risk if CPA < 200m and TCPA < 180s
         let rawCri = 0;
         if (cpa < 500 && tcpa < 300 && tcpa > 0) {
            rawCri = Math.max(0, 1 - (cpa / 500) * 0.5 - (tcpa / 300) * 0.5);
         }
 
-        // ── EMA smoothing per target ─────────────────────────────────────
-        // Keep a smooth state per target ID to prevent flickering
         if (!t._smooth) {
           t._smooth = { cri: rawCri, cpa, tcpa, dist, threat: 'low', threatTicks: 0, inRange: true };
         }
@@ -208,9 +180,6 @@ module.exports = {
         const sCpa  = t._smooth.cpa;
         const sDist = t._smooth.dist;
 
-        // ── Hysteresis threat classification ────────────────────────────
-        // Thresholds have a "deadband" — must cross a higher threshold to
-        // upgrade and a lower one to downgrade. Prevents rapid toggling.
         const prevThreat = t._smooth.threat;
         let threat;
         if (prevThreat === 'critical') {

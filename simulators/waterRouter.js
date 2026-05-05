@@ -1,4 +1,3 @@
-// Using native global fetch available in Node.js 18+ (User is on v24.10.0)
 const turf = require("@turf/turf");
 const coastline = require("./data/coastline-simplified.json");
 
@@ -9,7 +8,6 @@ async function computeWaterRoute(fromLat, fromLng, toPoints) {
     return fallbackWaterRoute(fromLat, fromLng, toPoints);
   }
 
-  // Build coordinates array: start + all waypoints [lng, lat]
   const coords = [
     [fromLng, fromLat],
     ...toPoints.map(p => [p.lng, p.lat])
@@ -40,7 +38,6 @@ async function computeWaterRoute(fromLat, fromLng, toPoints) {
   }
 }
 
-// Fallback: Turf.js waypoint interpolation avoiding known land polygons
 function fallbackWaterRoute(fromLat, fromLng, toPoints) {
   const allPoints = [{lat: fromLat, lng: fromLng}, ...toPoints];
   const route = [];
@@ -54,14 +51,12 @@ function fallbackWaterRoute(fromLat, fromLng, toPoints) {
 
 function computeSegmentAroundLand(from, to) {
   if (!coastline || !coastline.features || coastline.features.length === 0) {
-      // Empty coastline => no land
       return interpolatePoints(from, to, 20);
   }
 
   const line = turf.lineString([[from.lng, from.lat], [to.lng, to.lat]]);
   let intersects = false;
   
-  // Naive feature intersection since turf.lineIntersect expects two exact features.
   for (const feature of coastline.features) {
      const iPoint = turf.lineIntersect(line, feature);
      if (iPoint.features.length > 0) {
@@ -71,15 +66,12 @@ function computeSegmentAroundLand(from, to) {
   }
 
   if (!intersects) {
-    // No land crossing — straight line is fine
     return interpolatePoints(from, to, 20); // 20 intermediate points
   }
   
-  // Land detected — compute bypass using buffer offset
   const midLat = (from.lat + to.lat) / 2;
   const midLng = (from.lng + to.lng) / 2;
   
-  // Perpendicular offset: rotate bearing 90°, push out 0.1°
   const bearingDeg = Math.atan2(to.lng - from.lng, to.lat - from.lat) * 180 / Math.PI;
   const perpBearing = (bearingDeg + 90) % 360;
   const offsetDist = 0.15; // degrees — enough to clear coast
@@ -87,8 +79,6 @@ function computeSegmentAroundLand(from, to) {
   const bypassLat = midLat + offsetDist * Math.cos(perpBearing * Math.PI / 180);
   const bypassLng = midLng + offsetDist * Math.sin(perpBearing * Math.PI / 180);
   
-  // Notice: to prevent infinite recursion on complex shapes, this should be bounded 
-  // or return a simpler set. For this simulator baseline, we return the V-shaped bypass.
   return [
     ...interpolatePoints(from, {lat: bypassLat, lng: bypassLng}, 10),
     ...interpolatePoints({lat: bypassLat, lng: bypassLng}, to, 10),

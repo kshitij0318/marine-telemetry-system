@@ -2,12 +2,10 @@ const express = require('express');
 const router = express.Router();
 const missionService = require('../services/missionService');
 
-// Get full mission state
 router.get('/', (req, res) => {
   res.json(missionService.getMissionState());
 });
 
-// Sync entire waypoint array
 router.post('/waypoints', (req, res) => {
   try {
     const { waypoints } = req.body;
@@ -19,12 +17,10 @@ router.post('/waypoints', (req, res) => {
   }
 });
 
-// Clear all waypoints
 router.delete('/waypoints', (req, res) => {
   res.json(missionService.clearWaypoints());
 });
 
-// Start mission
 router.post('/start', (req, res) => {
   try {
     res.json(missionService.setMissionStatus(true));
@@ -33,7 +29,6 @@ router.post('/start', (req, res) => {
   }
 });
 
-// Stop mission
 router.post('/stop', (req, res) => {
   res.json(missionService.setMissionStatus(false));
 });

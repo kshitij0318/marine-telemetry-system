@@ -26,7 +26,6 @@ import { Geofence, GeofenceMode } from '../types/geofence';
 import { validateWaypointAgainstGeofences, filterWaypointsByGeofences } from '../utils/geofenceValidator';
 import { toast } from 'sonner';
 
-// ── Types ──────────────────────────────────────────────────────────────
 interface Waypoint {
   id: string;
   lat: number;
@@ -49,7 +48,6 @@ interface RerouteAnimation {
   modifiedWaypoints: number;
 }
 
-// ── Map Helpers ─────────────────────────────────────────────────────────
 function ChangeView({ center, zoom, follow }: { center: [number, number], zoom: number, follow: boolean }) {
   const map = useMap();
   useEffect(() => {
@@ -75,7 +73,6 @@ const StatRow = ({ label, value, color = "text-marine-text" }: { label: string, 
   </div>
 );
 
-// ── Main Component ──────────────────────────────────────────────────────
 export default function MapCommandCenter() {
   const { sensorData, sendCommand, missionState, navigationDestination } = useTelemetry();
   const { startMission: contextStartMission, stopMission: contextStopMission } = useMission();
@@ -106,7 +103,6 @@ export default function MapCommandCenter() {
     return saved ? JSON.parse(saved) : null;
   }, [navigationDestination]); // Re-evaluate when nav changes (as proxy for home set in panel)
 
-  // Nudge step in degrees (~55m)
   const NUDGE_DEG = 0.0005;
 
   const updateWaypointPosition = (id: string, newLat: number, newLng: number) => {
@@ -115,14 +111,12 @@ export default function MapCommandCenter() {
     ));
   };
 
-  // Select a waypoint for editing
   const selectWaypoint = (wp: Waypoint) => {
     if (missionState?.active) return;
     setSelectedWaypointId(wp.id);
     setEditingPos({ lat: wp.lat, lng: wp.lng });
   };
 
-  // Confirm move: apply editingPos to the selected waypoint
   const confirmWaypointMove = () => {
     if (selectedWaypointId && editingPos) {
       updateWaypointPosition(selectedWaypointId, editingPos.lat, editingPos.lng);
@@ -131,13 +125,11 @@ export default function MapCommandCenter() {
     setEditingPos(null);
   };
 
-  // Cancel move
   const cancelWaypointMove = () => {
     setSelectedWaypointId(null);
     setEditingPos(null);
   };
 
-  // Refs for keyboard handler to avoid effect re-runs
   const confirmRef = useRef(confirmWaypointMove);
   const cancelRef = useRef(cancelWaypointMove);
   const editingPosRef = useRef(editingPos);
@@ -146,7 +138,6 @@ export default function MapCommandCenter() {
   useEffect(() => { cancelRef.current = cancelWaypointMove; }, [cancelWaypointMove]);
   useEffect(() => { editingPosRef.current = editingPos; }, [editingPos]);
 
-  // Keyboard arrow-key nudge
   useEffect(() => {
     if (!selectedWaypointId) return;
 
@@ -154,7 +145,6 @@ export default function MapCommandCenter() {
       const keys = ['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Enter','Escape'];
       if (!keys.includes(e.key)) return;
 
-      // CRITICAL: Stop page from scrolling
       e.preventDefault();
       e.stopPropagation();
 
@@ -177,7 +167,6 @@ export default function MapCommandCenter() {
       });
     };
 
-    // Use capture: true to ensure we get the event before Leaflet or the browser
     window.addEventListener('keydown', handler, { capture: true });
     return () => window.removeEventListener('keydown', handler, { capture: true });
   }, [selectedWaypointId]);
@@ -187,7 +176,6 @@ export default function MapCommandCenter() {
     const wps = reroutedWaypoints.length > 0 ? reroutedWaypoints : originalWaypoints;
     if (wps.length < 1) return { distance: 0, eta: 0 };
     
-    // If only 1 WP, distance is from vessel
     if (wps.length === 1) {
       const d = calculateDistance(animatedPos.lat, animatedPos.lng, wps[0].lat, wps[0].lng);
       const speedKnots = sensorData.gnss.speed || 5;
@@ -196,9 +184,7 @@ export default function MapCommandCenter() {
     }
 
     let totalD = 0;
-    // From vessel to first wp
     totalD += calculateDistance(animatedPos.lat, animatedPos.lng, wps[0].lat, wps[0].lng);
-    // Between wps
     for (let i = 0; i < wps.length - 1; i++) {
        totalD += calculateDistance(wps[i].lat, wps[i].lng, wps[i+1].lat, wps[i+1].lng);
     }
@@ -242,21 +228,69 @@ export default function MapCommandCenter() {
     setEditingPos(null);
   };
 
+  const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
+  const [saveFileName, setSaveFileName] = useState('');
+
   const handleSaveMission = () => {
+    setIsSaveModalOpen(true);
+    setSaveFileName(`mission_${new Date().toISOString().split('T')[0]}`);
+  };
+
+  const executeSaveMission = async () => {
+    if (!saveFileName.trim()) {
+      toast.error('Filename cannot be empty');
+      return;
+    }
+
+    const finalName = saveFileName.endsWith('.csv') ? saveFileName : `${saveFileName}.csv`;
     const csv = exportMissionToCSV(originalWaypoints, avoidanceZones);
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `mission_${new Date().toISOString().split('T')[0]}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+
+    if (window.electronAPI) {
+      const result = await window.electronAPI.saveMission(finalName, csv);
+      if (result.success) {
+        toast.success(`Mission saved to ${result.path}`);
+        setIsSaveModalOpen(false);
+      } else {
+        toast.error(`Failed to save: ${result.error}`);
+      }
+    } else {
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = finalName;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success('Mission downloaded (Browser Fallback)');
+      setIsSaveModalOpen(false);
+    }
+  };
+
+  const handleLoadMission = async () => {
+    if (window.electronAPI) {
+      const result = await window.electronAPI.loadMission();
+      if (result.success && result.data) {
+        try {
+          const { waypoints, zones } = importMissionFromCSV(result.data);
+          setOriginalWaypoints(waypoints as any);
+          setAvoidanceZones(zones);
+          toast.success(`Loaded ${result.fileName}`);
+        } catch (e) {
+          toast.error('Failed to parse CSV file');
+        }
+      } else if (result.error) {
+        toast.error(`Load failed: ${result.error}`);
+      }
+    } else {
+      if (fileInputRef.current) {
+        fileInputRef.current.click();
+      }
+    }
   };
   
   const [checkingWater, setCheckingWater] = useState(false);
   const [landError, setLandError] = useState('');
 
-  // ── Dynamic Icons (waypoints only — vessel uses imperative VesselMarker) ──
 
   const waypointIcon = (name: string, active: boolean) => {
     const isPattern = /^[A-Z]{2}-\d+$/.test(name);
@@ -271,7 +305,6 @@ export default function MapCommandCenter() {
     });
   };
 
-  // Rerouting logic (Frontend specific to planning phase)
   useEffect(() => {
     if (avoidanceZones.length > 0) {
       const { newPath, modifiedWPsCount } = computeReroutedPath(originalWaypoints, avoidanceZones);
@@ -295,14 +328,12 @@ export default function MapCommandCenter() {
     }
   }, [avoidanceZones, originalWaypoints]);
 
-  // SINGLE SOURCE OF TRUTH: If mission is active, use backend waypoints. Otherwise planning ones.
   const activeWaypoints = (missionState?.active && missionState.waypoints) ? missionState.waypoints : (reroutedWaypoints.length > 0 ? reroutedWaypoints : originalWaypoints);
 
   const startMission = () => {
     const planningWaypoints = reroutedWaypoints.length > 0 ? reroutedWaypoints : originalWaypoints;
     if (planningWaypoints.length < 2) return;
     
-    // MUTUAL EXCLUSION: Mission overrides Navigation
     sendCommand({ type: 'CLEAR_NAVIGATION_DESTINATION', vesselId: 'V001' });
 
     contextStartMission({
@@ -320,7 +351,6 @@ export default function MapCommandCenter() {
     setFollowVessel(true);
   };
 
-  // Reactive State Handoff: Only clear planning path when backend confirms mission is active
   useEffect(() => {
     if (missionState?.active) {
       setOriginalWaypoints([]);
@@ -331,7 +361,6 @@ export default function MapCommandCenter() {
   const handleMapClick = async (latlng: any) => {
     if (checkingWater) return;
 
-    // Pattern placement: skip water check, place pattern immediately
     if (activePatternRequest) {
       const { key, params } = activePatternRequest;
       let wps: { lat: number; lng: number }[] = [];
@@ -350,7 +379,6 @@ export default function MapCommandCenter() {
         name: `${code}-${i + 1}`
       }));
 
-      // Validate pattern against geofences
       const filteredWPs = filterWaypointsByGeofences(newWPs, geofences);
       if (filteredWPs.length < newWPs.length) {
         toast.error(`Pattern adjusted: ${newWPs.length - filteredWPs.length} waypoints removed/snapped due to geofences.`);
@@ -365,25 +393,21 @@ export default function MapCommandCenter() {
       return;
     }
 
-    // Geofence drawing
     if (isDrawingGeofence) {
       setCurrentZonePoints(prev => [...prev, { lat: latlng.lat, lng: latlng.lng }]);
       return;
     }
 
-    // Zone drawing: add corner point
     if (isDrawingZone) {
       setCurrentZonePoints(prev => [...prev, { lat: latlng.lat, lng: latlng.lng }]);
       return;
     }
 
-    // If a waypoint is selected, clicking the map moves it there (preview only)
     if (selectedWaypointId && editingPos) {
       setEditingPos({ lat: latlng.lat, lng: latlng.lng });
       return;
     }
 
-    // Mission waypoint: validate water first
     if (mapMode === 'mission') {
       setCheckingWater(true);
       try {
@@ -395,7 +419,6 @@ export default function MapCommandCenter() {
         }
       } catch { /* fail open */ } finally { setCheckingWater(false); }
 
-      // Validate against geofences
       const validation = validateWaypointAgainstGeofences(latlng.lat, latlng.lng, geofences);
       if (!validation.valid) {
         if (validation.snappedPoint) {
@@ -413,7 +436,6 @@ export default function MapCommandCenter() {
         return;
       }
 
-      // Add mission waypoint (only in mission mode, not during an active mission)
       if (!missionState?.active && !navigationDestination?.set) {
         const newWaypoint: Waypoint = {
           id: `wp-${Date.now()}`,
@@ -429,9 +451,7 @@ export default function MapCommandCenter() {
 
   const handleMapDblClick = (latlng: any) => {
     if (isDrawingZone && currentZonePoints.length >= 1) {
-      // The double-click itself closes the zone — include this point only if it's not too close to last
       const finalPoints = [...currentZonePoints];
-      // Need at least 3 points total to form a polygon
       if (finalPoints.length >= 2) {
         const newZone: AvoidanceZone = {
           id: `zone-${Date.now()}`,
@@ -441,7 +461,6 @@ export default function MapCommandCenter() {
         };
         setAvoidanceZones(prev => [...prev, newZone]);
       }
-      // Reset drawing state — next zone will be completely independent
       setCurrentZonePoints([]);
       setIsDrawingZone(false);
     }
@@ -908,7 +927,7 @@ export default function MapCommandCenter() {
                   <Button 
                     variant="outline" 
                     className="flex-1 text-[10px] font-bold uppercase border-marine-border hover:bg-marine-accent/10 h-10"
-                    onClick={() => fileInputRef.current?.click()}
+                    onClick={handleLoadMission}
                     disabled={missionState?.active}
                   >
                     <Upload className="w-3.5 h-3.5 mr-1.5" /> Load CSV
@@ -922,25 +941,6 @@ export default function MapCommandCenter() {
                     <FileDown className="w-3.5 h-3.5 mr-1.5" /> Save
                   </Button>
                 </div>
-                <input 
-                  type="file" 
-                  ref={fileInputRef} 
-                  className="hidden" 
-                  accept=".csv"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) {
-                      const reader = new FileReader();
-                      reader.onload = (entry) => {
-                        const text = entry.target?.result as string;
-                        const { waypoints, zones } = importMissionFromCSV(text);
-                        setOriginalWaypoints(waypoints as any);
-                        setAvoidanceZones(zones);
-                      };
-                      reader.readAsText(file);
-                    }
-                  }}
-                />
               </div>
 
               {landError && (
@@ -1202,6 +1202,39 @@ export default function MapCommandCenter() {
           }}
           onClose={() => setEditingWaypointId(null)}
         />
+      )}
+
+      {/* Save Mission Modal */}
+      {isSaveModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-marine-surface border border-marine-border p-6 rounded-xl w-full max-w-md shadow-2xl">
+            <h3 className="text-lg font-bold text-marine-text mb-2">Save Mission</h3>
+            <p className="text-sm text-marine-text-secondary mb-4">Enter a name for your mission file. The .csv extension will be automatically appended.</p>
+            
+            <div className="relative mb-6">
+              <input
+                type="text"
+                value={saveFileName}
+                onChange={(e) => setSaveFileName(e.target.value.replace(/\.csv$/i, ''))}
+                className="w-full bg-marine-dark border border-marine-border rounded-lg pl-3 pr-12 py-2 text-marine-text focus:outline-none focus:border-marine-accent"
+                placeholder="mission_name"
+                autoFocus
+              />
+              <div className="absolute right-3 top-1/2 -translate-y-1/2 text-marine-text-secondary font-mono text-sm pointer-events-none">
+                .csv
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3">
+              <Button variant="outline" onClick={() => setIsSaveModalOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={executeSaveMission} className="bg-marine-accent hover:bg-marine-accent/80 text-black font-bold">
+                Save to /release
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

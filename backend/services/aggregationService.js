@@ -1,9 +1,7 @@
 const deviceRegistryService = require("./deviceRegistryService");
 
-// rawVesselData: { vesselId: { deviceId: fullPayload } }
 const rawVesselData = {};
 
-// Map: sensorType → namespace key in aggregated state
 const SENSOR_TYPE_TO_KEY = {
   GNSS:        'gnss',
   CTD:         'ctd',
@@ -38,12 +36,9 @@ class AggregationService {
       if (!key) continue;
       const payload = rawVesselData[vesselId][device.deviceId];
       if (!payload) continue;
-      // Merge the full payload under the namespace key (last writer wins per sensor type)
       namespace[key] = { ...payload };
     }
 
-    // Preserve any existing namespace keys for inactive sensors
-    // (Keep last known good data, just won't be refreshed)
     if (!this._aggregated) this._aggregated = {};
     if (!this._aggregated[vesselId]) this._aggregated[vesselId] = {};
 

@@ -29,7 +29,6 @@ export default function PatternPresetsPanel({
   const [isOpen, setIsOpen] = useState(false);
   const [selectedPattern, setSelectedPattern] = useState<PatternType | null>(null);
   
-  // Param states
   const [params, setParams] = useState<any>({
     LAWNMOWER: { widthM: 500, heightM: 300, spacingM: 50, headingDeg: 0, turnRadiusM: 20 },
     SPIRAL: { maxRadiusM: 300, spacingM: 40, clockwise: true },

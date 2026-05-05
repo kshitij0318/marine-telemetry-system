@@ -27,14 +27,10 @@ export function CameraFeed({ sensorId, label, imagePath, targets, isActive = tru
     const img = new Image();
     img.src = imagePath;
     img.onload = () => {
-      // Draw background image
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
-      // Draw targets
       targets.forEach(t => {
-        // Map relativeAngleInFov (-1 to 1) to x coordinate (0 to width)
         const x = (t.relativeAngleInFov + 1) / 2 * canvas.width;
-        // Mock a y-coordinate based on distance (closer = lower on screen)
         const y = canvas.height / 2 + (1000 / t.distance) * 20;
         
         const boxWidth = Math.max(20, 2000 / t.distance);
@@ -44,16 +40,13 @@ export function CameraFeed({ sensorId, label, imagePath, targets, isActive = tru
         ctx.lineWidth = 2;
         ctx.strokeRect(x - boxWidth / 2, y - boxHeight / 2, boxWidth, boxHeight);
 
-        // Label
         ctx.fillStyle = ctx.strokeStyle;
         ctx.font = 'bold 10px Inter, sans-serif';
         ctx.fillText(`${t.id} (${t.distance.toFixed(0)}m)`, x - boxWidth / 2, y - boxHeight / 2 - 5);
       });
 
-      // UI Overlays
       ctx.strokeStyle = 'rgba(0, 217, 255, 0.3)';
       ctx.lineWidth = 1;
-      // Crosshair
       ctx.beginPath();
       ctx.moveTo(canvas.width / 2 - 20, canvas.height / 2);
       ctx.lineTo(canvas.width / 2 + 20, canvas.height / 2);
@@ -61,7 +54,6 @@ export function CameraFeed({ sensorId, label, imagePath, targets, isActive = tru
       ctx.lineTo(canvas.width / 2, canvas.height / 2 + 20);
       ctx.stroke();
 
-      // Corners
       const l = 15;
       ctx.beginPath();
       ctx.moveTo(10, 10+l); ctx.lineTo(10, 10); ctx.lineTo(10+l, 10);

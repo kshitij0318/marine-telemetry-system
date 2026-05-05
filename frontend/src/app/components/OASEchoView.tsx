@@ -1,8 +1,3 @@
-// ── OASEchoView.tsx ────────────────────────────────────────────────────────────
-// Echo sounder / sonar-style OAS camera renderer.
-// Replaces the sky/horizon camera aesthetic with a dark green sonar display.
-// Detection logic, sensor positions, and props interface are UNCHANGED from CameraFeed.
-// Only the canvas draw function changes style.
 
 import React, { useRef, useEffect } from 'react';
 
@@ -50,25 +45,21 @@ export function OASEchoView({ sensor, detections, isActive = true }: OASEchoView
     const dets = detections || [];
 
     const draw = () => {
-      // ── Background: dark sonar screen ─────────────────────────────────────
       ctx.fillStyle = '#000a0a';
       ctx.fillRect(0, 0, W, H);
 
-      // Subtle radial glow from center-bottom (sonar emitter)
       const bgGrd = ctx.createRadialGradient(W / 2, H, 0, W / 2, H, H * 1.2);
       bgGrd.addColorStop(0, 'rgba(0,40,20,0.3)');
       bgGrd.addColorStop(1, 'transparent');
       ctx.fillStyle = bgGrd;
       ctx.fillRect(0, 0, W, H);
 
-      // ── Horizontal scan lines (echo sounder aesthetic) ───────────────────
       for (let y = 0; y < H; y += 4) {
         const alpha = 0.015 + (y / H) * 0.025;
         ctx.fillStyle = `rgba(0, 255, 100, ${alpha})`;
         ctx.fillRect(0, y, W, 1);
       }
 
-      // ── Range grid (horizontal bands = distance rings) ───────────────────
       const rangeSteps = 5;
       for (let i = 1; i <= rangeSteps; i++) {
         const y = (i / rangeSteps) * H;
@@ -85,7 +76,6 @@ export function OASEchoView({ sensor, detections, isActive = true }: OASEchoView
         ctx.fillText(`${rangeM.toFixed(0)}m`, 4, y - 3);
       }
 
-      // ── FOV bearing lines (vertical azimuth guides) ───────────────────────
       const bearingSteps = 4;
       for (let step = 0; step <= bearingSteps; step++) {
         const frac = step / bearingSteps;
@@ -104,7 +94,6 @@ export function OASEchoView({ sensor, detections, isActive = true }: OASEchoView
       }
       ctx.textAlign = 'left';
 
-      // ── Vertical center boresight line ────────────────────────────────────
       ctx.beginPath();
       ctx.moveTo(W / 2, 0);
       ctx.lineTo(W / 2, H);
@@ -114,7 +103,6 @@ export function OASEchoView({ sensor, detections, isActive = true }: OASEchoView
       ctx.stroke();
       ctx.setLineDash([]);
 
-      // ── Animated scan sweep line ──────────────────────────────────────────
       scanLineRef.current = (scanLineRef.current + 1) % H;
       const sweepY = scanLineRef.current;
       const sweepGrd = ctx.createLinearGradient(0, sweepY - 20, 0, sweepY + 4);
@@ -124,21 +112,17 @@ export function OASEchoView({ sensor, detections, isActive = true }: OASEchoView
       ctx.fillStyle = sweepGrd;
       ctx.fillRect(0, sweepY - 20, W, 24);
 
-      // ── Echo return blobs ─────────────────────────────────────────────────
       dets.forEach(det => {
         if (det.distance == null || det.relativeAngleInFov == null) return;
         const color = THREAT_COLORS[det.threat] ?? '#00ff64';
 
-        // X: bearing left/right (-1=left, +1=right)
         const blobX = W / 2 + det.relativeAngleInFov * (W / 2 - 16);
 
-        // Y: range — top=far, bottom=close (sonar convention: emitter at bottom)
         const rangeFrac = Math.min(det.distance / sensor.maxRangeM, 1);
         const blobY = (1 - rangeFrac) * H * 0.9 + H * 0.05;
 
         const blobR = Math.max(4, 14 * (1 - rangeFrac * 0.7));
 
-        // Outer glow
         const grd = ctx.createRadialGradient(blobX, blobY, 0, blobX, blobY, blobR * 3);
         grd.addColorStop(0, color + 'cc');
         grd.addColorStop(0.4, color + '44');
@@ -148,7 +132,6 @@ export function OASEchoView({ sensor, detections, isActive = true }: OASEchoView
         ctx.fillStyle = grd;
         ctx.fill();
 
-        // Bright core
         ctx.beginPath();
         ctx.arc(blobX, blobY, blobR, 0, Math.PI * 2);
         ctx.fillStyle = color;
@@ -157,18 +140,15 @@ export function OASEchoView({ sensor, detections, isActive = true }: OASEchoView
         ctx.fill();
         ctx.shadowBlur = 0;
 
-        // Range label
         ctx.fillStyle = color;
         ctx.font = 'bold 8px monospace';
         ctx.textAlign = 'center';
         ctx.fillText(`${det.distance.toFixed(0)}m`, blobX, blobY - blobR - 4);
 
-        // ID label
         ctx.font = '7px monospace';
         ctx.fillStyle = 'rgba(255,255,255,0.7)';
         ctx.fillText(det.id, blobX, blobY - blobR - 13);
 
-        // Trailing echo streaks (simulate sonar persistence)
         for (let trail = 1; trail <= 3; trail++) {
           const alpha = Math.floor((1 - trail * 0.3) * 40).toString(16).padStart(2, '0');
           ctx.beginPath();
@@ -179,7 +159,6 @@ export function OASEchoView({ sensor, detections, isActive = true }: OASEchoView
         ctx.textAlign = 'left';
       });
 
-      // ── No contacts ───────────────────────────────────────────────────────
       if (dets.length === 0) {
         ctx.fillStyle = 'rgba(0,255,100,0.15)';
         ctx.font = '10px monospace';
@@ -189,7 +168,6 @@ export function OASEchoView({ sensor, detections, isActive = true }: OASEchoView
         ctx.textAlign = 'left';
       }
 
-      // ── Sensor label ──────────────────────────────────────────────────────
       ctx.fillStyle = '#00ff64';
       ctx.font = 'bold 9px monospace';
       ctx.textAlign = 'left';
@@ -198,7 +176,6 @@ export function OASEchoView({ sensor, detections, isActive = true }: OASEchoView
         6, 14
       );
 
-      // ── Active/Inactive indicator ─────────────────────────────────────────
       const statusColor = isActive ? '#00ff64' : '#666';
       ctx.beginPath();
       ctx.arc(W - 10, 10, 4, 0, Math.PI * 2);
@@ -227,7 +204,6 @@ export function OASEchoView({ sensor, detections, isActive = true }: OASEchoView
   );
 }
 
-// Default sensor config for when sensor prop is not provided
 OASEchoView.defaultSensor = {
   id: 'OAS-DEFAULT',
   label: 'SECTOR',

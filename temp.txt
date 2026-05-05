@@ -3,3 +3,4 @@ redirect to the specific sensors
 try and integrate a db - for getting passively generated values from before - data shouldnt only be represented when we start the dashboard
 map - lat long for current position of the vehicle    
 
+git add .

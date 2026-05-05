@@ -21,27 +21,22 @@ export function OASCameraFeed({ payload, sensorId }: OASCameraFeedProps) {
       const W = canvas.width;
       const H = canvas.height;
       
-      // Clear
       ctx.fillStyle = '#0a0f1e';
       ctx.fillRect(0, 0, W, H);
 
-      // Add scanlines/noise for realism
       ctx.fillStyle = 'rgba(255, 255, 255, 0.02)';
       for (let y = 0; y < H; y += 4) {
         ctx.fillRect(0, y, W, 1);
       }
 
-      // Draw horizon
       const horizonY = H * 0.45;
       
-      // Sky
       const skyGrad = ctx.createLinearGradient(0, 0, 0, horizonY);
       skyGrad.addColorStop(0, '#0f1e33');
       skyGrad.addColorStop(1, '#1a2d47');
       ctx.fillStyle = skyGrad;
       ctx.fillRect(0, 0, W, horizonY);
 
-      // Water grid
       const waterGrad = ctx.createLinearGradient(0, horizonY, 0, H);
       waterGrad.addColorStop(0, '#0a1628');
       waterGrad.addColorStop(1, '#001a33');
@@ -51,7 +46,6 @@ export function OASCameraFeed({ payload, sensorId }: OASCameraFeedProps) {
       ctx.strokeStyle = 'rgba(0, 217, 255, 0.1)';
       ctx.lineWidth = 1;
       
-      // Perspective grid
       ctx.beginPath();
       for (let i = 0; i <= 10; i++) {
         const x = (W / 10) * i;
@@ -60,7 +54,6 @@ export function OASCameraFeed({ payload, sensorId }: OASCameraFeedProps) {
       }
       ctx.stroke();
 
-      // Horizon line
       ctx.beginPath();
       ctx.moveTo(0, horizonY);
       ctx.lineTo(W, horizonY);
@@ -68,7 +61,6 @@ export function OASCameraFeed({ payload, sensorId }: OASCameraFeedProps) {
       ctx.lineWidth = 2;
       ctx.stroke();
 
-      // Crosshairs
       ctx.beginPath();
       ctx.moveTo(W / 2, 0);
       ctx.lineTo(W / 2, H);
@@ -79,7 +71,6 @@ export function OASCameraFeed({ payload, sensorId }: OASCameraFeedProps) {
       ctx.stroke();
       ctx.setLineDash([]);
 
-      // Draw UI overlay
       ctx.fillStyle = '#00d9ff';
       ctx.font = '12px monospace';
       ctx.fillText(`CAM: ${sensorId}`, 10, 20);
@@ -103,29 +94,21 @@ export function OASCameraFeed({ payload, sensorId }: OASCameraFeedProps) {
         return;
       }
 
-      // Draw Targets
       if (payload.visibleTargets && payload.visibleTargets.length > 0) {
-        // Sort by distance (back to front)
         const sortedTargets = [...payload.visibleTargets].sort((a, b) => b.distance - a.distance);
         
         sortedTargets.forEach(target => {
-          // Map relative angle (-1 to 1) to screen X
           const targetX = (W / 2) + (target.relativeAngleInFov * (W / 2));
           
-          // Map distance to Y (closer = lower on screen)
-          // Let's say 3000m is horizon, 0m is bottom
           const maxDist = 3000;
           const distRatio = Math.max(0, Math.min(1, target.distance / maxDist));
-          // Logarithmic scaling for perspective
           const perspectiveY = horizonY + (H - horizonY) * Math.pow(1 - distRatio, 2);
           
-          // Size scales with distance
           const baseSize = Math.max(10, 60 * (1 - distRatio));
 
           const isHigh = target.threat === 'high' || target.threat === 'critical';
           const color = isHigh ? '#f87171' : target.threat === 'medium' ? '#fbbf24' : '#4ade80';
 
-          // Draw target bounding box
           ctx.strokeStyle = color;
           ctx.lineWidth = isHigh ? 2 : 1;
           ctx.beginPath();
@@ -133,11 +116,9 @@ export function OASCameraFeed({ payload, sensorId }: OASCameraFeedProps) {
           ctx.stroke();
           
           if (isHigh) {
-            // Fill high threat targets slightly
             ctx.fillStyle = `${color}33`;
             ctx.fill();
             
-            // Add threat cross
             ctx.beginPath();
             ctx.moveTo(targetX - baseSize / 2, perspectiveY - baseSize / 2);
             ctx.lineTo(targetX + baseSize / 2, perspectiveY - baseSize / 2);
@@ -146,7 +127,6 @@ export function OASCameraFeed({ payload, sensorId }: OASCameraFeedProps) {
             ctx.stroke();
           }
 
-          // Label
           ctx.fillStyle = color;
           ctx.font = '10px monospace';
           ctx.fillText(`${target.distance.toFixed(0)}m`, targetX - 10, perspectiveY - baseSize - 5);

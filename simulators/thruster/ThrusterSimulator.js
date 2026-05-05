@@ -1,13 +1,11 @@
 const topics = require("../../shared/constants/topics");
 
-// FIELD AUDIT — THRUSTER
 module.exports = {
   start: (client, vesselId, shipState) => {
     const dataTopic = topics.THRUSTER.buildDataTopic(vesselId, "THR01");
     const thrusterNames = ['PORT', 'STARBOARD', 'BOW'];
     let tickCount = 0;
     
-    // Internal state array
     let thrusterStates = thrusterNames.map(name => ({
       name,
       currentRpm: 0,
@@ -26,22 +24,17 @@ module.exports = {
       const thrusters = thrusterStates.map((ts, i) => {
         ts.runtimeSeconds += 0.1;
 
-        // 1. Target RPM derived from shipState speed with mechanical inertia
-        // If speed is 10kts, target is ~1800 RPM. Offset by 'i' so they vary slightly.
         const baseTarget = state.speed * 180 + (i * 50);
         const cruiseMod = 50 * Math.sin(t / 15 + i); // Engine "burble"
         const targetRPM = Math.max(0, baseTarget + cruiseMod);
         
-        // Convergence towards target (mechanical inertia)
         ts.currentRpm += (targetRPM - ts.currentRpm) * 0.05;
         const rpmRatio = ts.currentRpm / ts.maxRpm;
 
-        // 2. Thermodynamic Model (Proportional to square of RPM)
         const loadFactor = rpmRatio ** 2;
         const targetTemp = 35 + loadFactor * 55 + 2 * Math.sin(t / 60 + i);
         ts.baseTemp += (targetTemp - ts.baseTemp) * 0.01 + (Math.random() - 0.5) * 0.05;
 
-        // 3. Electrical & Mechanical Coupling
         const torque = 50 + ts.currentRpm * 0.12 + Math.random() * 5;
         const powerKW = (torque * ts.currentRpm * 2 * Math.PI / 60) / 1000;
         
@@ -51,8 +44,6 @@ module.exports = {
 
         const thrust = rpmRatio * 45000 + (Math.random() - 0.5) * 100;
 
-        // 4. Efficiency & Vibration
-        // Optimal efficiency at 75% load
         const efficiency = 92 - Math.abs(rpmRatio - 0.75) * 20 + Math.sin(t / 20 + i) * 2;
         const vibration = 0.05 + (rpmRatio ** 3) * 0.5 + 0.05 * Math.sin(t * 10 + i); // high freq ripple
 
@@ -82,7 +73,6 @@ module.exports = {
       const payload = {
         vesselId, deviceId: "THR01", timestamp: now,
         thrusters,
-        // Provide backwards compatibility or aggregate stats at top level
         rpm: thrusters[0].rpm,
         power: thrusters[0].power,
         temperature: thrusters[0].temperature,

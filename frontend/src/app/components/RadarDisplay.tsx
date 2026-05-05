@@ -75,7 +75,6 @@ export const RadarDisplay: React.FC<RadarDisplayProps> = ({
     if (!ctx) return;
 
     let animationFrameId: number;
-    // Internal sweep state for the visual effect
     let internalSweepAngle = 0;
 
     const drawRadar = () => {
@@ -86,13 +85,11 @@ export const RadarDisplay: React.FC<RadarDisplayProps> = ({
 
       ctx.clearRect(0, 0, size, size);
 
-      // Draw background
       ctx.beginPath();
       ctx.arc(center, center, radius, 0, Math.PI * 2);
       ctx.fillStyle = colors.bg;
       ctx.fill();
 
-      // Draw Grid Rings
       ctx.strokeStyle = colors.grid;
       ctx.lineWidth = 1;
       for (let i = 1; i <= 4; i++) {
@@ -101,7 +98,6 @@ export const RadarDisplay: React.FC<RadarDisplayProps> = ({
         ctx.stroke();
       }
 
-      // Draw Crosshairs
       ctx.beginPath();
       ctx.moveTo(center, center - radius);
       ctx.lineTo(center, center + radius);
@@ -109,7 +105,6 @@ export const RadarDisplay: React.FC<RadarDisplayProps> = ({
       ctx.lineTo(center + radius, center);
       ctx.stroke();
 
-      // Combine detections and targets for rendering
       const targetMap = new Map();
       
       (detections || []).forEach(d => {
@@ -128,8 +123,6 @@ export const RadarDisplay: React.FC<RadarDisplayProps> = ({
 
       renderList.forEach(obj => {
         const dRadius = (obj.dist / range) * radius;
-        // North is 0, degrees increase clockwise. 
-        // Math.cos/sin starts at East (3 o'clock), so subtract 90 deg.
         const dAngle = (obj.angle - 90) * (Math.PI / 180);
 
         const x = center + dRadius * Math.cos(dAngle);
@@ -152,7 +145,6 @@ export const RadarDisplay: React.FC<RadarDisplayProps> = ({
         ctx.shadowBlur = 0;
       });
 
-      // Draw Sweep
       ctx.save();
       ctx.translate(center, center);
       
@@ -169,7 +161,6 @@ export const RadarDisplay: React.FC<RadarDisplayProps> = ({
       ctx.fillStyle = gradient;
       ctx.fill();
 
-      // Draw sweeping line
       ctx.beginPath();
       ctx.moveTo(0, 0);
       ctx.lineTo(radius, 0);
@@ -179,7 +170,6 @@ export const RadarDisplay: React.FC<RadarDisplayProps> = ({
 
       ctx.restore();
 
-      // Update sweep angle with smoothing
       internalSweepAngle += 0.02;
 
       animationFrameId = requestAnimationFrame(drawRadar);

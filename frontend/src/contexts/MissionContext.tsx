@@ -46,8 +46,6 @@ export function MissionProvider({ children }: { children: React.ReactNode }) {
   const { sendCommand } = useTelemetry();
 
   const startMission = (m: Omit<ActiveMission, 'startTime' | 'currentWaypointIndex' | 'completedWaypoints'>) => {
-    // We send the handoff to the backend immediately. 
-    // The UI will update when the backend confirms 'active: true' in the broadcast.
     sendCommand({
       type: 'START_MISSION',
       vesselId: 'V001',
@@ -59,7 +57,6 @@ export function MissionProvider({ children }: { children: React.ReactNode }) {
   };
 
   const stopMission = (requestingPage: string) => {
-    // Optimization: Standardize Stop call for V001
     sendCommand({ 
       type: 'STOP_MISSION', 
       vesselId: 'V001',

@@ -21,7 +21,6 @@ export function MapCanvasOverlay({
   const map = useMap();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   
-  // Store latest props in refs to decouple drawing at 60fps from 10fps React state updates
   const stateRef = useRef({ mapMode, sensorData, radarSweepAngle, sonarEchoTrail });
   useEffect(() => {
     stateRef.current = { mapMode, sensorData, radarSweepAngle, sonarEchoTrail };
@@ -31,7 +30,6 @@ export function MapCanvasOverlay({
     const canvas = canvasRef.current;
     if (!canvas) return;
     
-    // Position the canvas over the leafet map container natively
     L.DomUtil.addClass(canvas, 'leaflet-zoom-animated');
     canvas.style.position = 'absolute';
     canvas.style.zIndex = '400'; // above tiles, below popups
@@ -50,13 +48,11 @@ export function MapCanvasOverlay({
         canvas.height = size.y;
       }
 
-      // Keep it aligned with map panning
       const topLeft = map.containerPointToLayerPoint([0, 0]);
       L.DomUtil.setPosition(canvas, topLeft);
 
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      // Wrapper to cast Lat/Lng to local canvas pixel space relative to TopLeft
       const latLngToCanvas = (lat: number, lng: number) => {
         const pt = map.latLngToContainerPoint([lat, lng]);
         return { x: pt.x, y: pt.y };
@@ -78,10 +74,8 @@ export function MapCanvasOverlay({
 
       if (mapMode === 'navigation') renderNavigationMap(baseProps);
       if (mapMode === 'tactical') {
-        // Neon green grid based on world coordinates
         ctx.strokeStyle = 'rgba(0, 255, 65, 0.15)';
         ctx.lineWidth = 1;
-        // Simple pixel grid spanning bounds
         for (let x = (topLeft.x % 50); x < canvas.width; x += 50) {
           ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
         }
@@ -91,7 +85,6 @@ export function MapCanvasOverlay({
         renderTacticalMap(baseProps);
       }
       if (mapMode === 'sonar') {
-        // Sonar mode is rendered by <SonarDisplay> canvas overlay in MapCommandCenter — nothing to draw here.
       }
 
       frameId = requestAnimationFrame(draw);
@@ -99,7 +92,6 @@ export function MapCanvasOverlay({
 
     draw();
 
-    // Map events
     map.on('move', draw);
     map.on('zoom', draw);
 

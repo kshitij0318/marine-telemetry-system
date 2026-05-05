@@ -60,7 +60,6 @@ export interface SensorData {
     maxRpm?: number;
     tempWarningThreshold?: number;
     status: SensorStatus;
-    // Multi-thruster array from simulator
     thrusters?: Array<{
       id: string; name: string; rpm: number; power: number; temperature: number;
       thrust: number; voltage: number; current: number; currentDraw: number;
@@ -184,12 +183,12 @@ export function useLiveTelemetry() {
     let closedExplicitly = false;
 
     const connect = () => {
-      // Prevent multiple concurrent connection attempts
       if (wsRef.current && (wsRef.current.readyState === WebSocket.CONNECTING || wsRef.current.readyState === WebSocket.OPEN)) {
         return;
       }
 
-      ws = new WebSocket('ws://localhost:5001');
+      const wsUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:5001';
+      ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
       ws.onopen = () => {
@@ -268,42 +267,33 @@ export function useLiveTelemetry() {
                 maxRpm: state.thruster?.maxRpm ?? prev.thruster.maxRpm,
                 tempWarningThreshold: state.thruster?.tempWarningThreshold ?? prev.thruster.tempWarningThreshold,
                 status: state.thruster?.status?.toLowerCase() as any ?? (state.thruster?.rpm !== undefined ? 'active' : prev.thruster.status),
-                // Pass through the full thrusters array for the multi-thruster dashboard
                 thrusters: state.thruster?.thrusters ?? prev.thruster.thrusters,
               },
               radar: (() => {
                 if (!state.radar) return prev.radar;
                 const α = 0.3; // EMA factor for numeric fields
 
-                // ── Advanced Target Persistence Layer ─────────────────────────
-                // We maintain a persistent registry by ID. If a target is missing from the 
-                // current packet, we keep it for up to 1500ms to prevent flickering.
                 const NOW = Date.now();
                 const TARGET_TTL_MS = 1500;
                 
                 const combinedMap = new Map();
                 
-                // 1. Seed with existing targets (those that haven't expired)
                 prev.radar.targets.forEach((t: any) => {
                   if (NOW - (t._lastSeen || NOW) < TARGET_TTL_MS) {
                     combinedMap.set(t.id, { ...t, _active: false }); // Mark as potentially stale
                   }
                 });
 
-                // 2. Overlay new targets from current packet
                 const incoming = state.radar.targets || [];
                 incoming.forEach((t: any) => {
                   const p = combinedMap.get(t.id);
                   if (!p) {
-                    // New target
                     combinedMap.set(t.id, { ...t, _lastSeen: NOW, _active: true });
                   } else {
-                    // Update and smooth existing target
                     combinedMap.set(t.id, {
                       ...t,
                       _lastSeen: NOW,
                       _active: true,
-                      // EMA Smoothing
                       rangem: p.rangem + (t.rangem - p.rangem) * α,
                       cpa:    p.cpa    + (t.cpa    - p.cpa)    * α,
                       tcpa:   p.tcpa   + (t.tcpa   - p.tcpa)   * α,
@@ -322,7 +312,6 @@ export function useLiveTelemetry() {
                   targets: mergedTargets,
                   detections: state.radar.detections || prev.radar.detections,
                   oasSensors: state.radar.oasSensors || prev.radar.oasSensors,
-                  // Only update maneuver if it actually changes — prevents banner flash
                   suggestedManeuver: state.radar.suggestedManeuver !== undefined
                     ? state.radar.suggestedManeuver
                     : prev.radar.suggestedManeuver,

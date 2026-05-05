@@ -10,28 +10,24 @@ import { useTelemetry } from '../contexts/TelemetryContext';
 export function useAnimatedVesselPosition() {
   const { sensorData } = useTelemetry();
   
-  // Internal state for the smoothly moving position
   const [animatedPos, setAnimatedPos] = useState({
     lat: sensorData.gnss.latitude ?? 18.9000,
     lng: sensorData.gnss.longitude ?? 72.6500,
     heading: sensorData.gnss.heading ?? 0
   });
 
-  // Target values from telemetry
   const targetRef = useRef({
     lat: sensorData.gnss.latitude ?? 18.9000,
     lng: sensorData.gnss.longitude ?? 72.6500,
     heading: sensorData.gnss.heading ?? 0
   });
 
-  // Current animation state refs to avoid re-render cycles
   const currentRef = useRef({
     lat: sensorData.gnss.latitude ?? 18.9000,
     lng: sensorData.gnss.longitude ?? 72.6500,
     heading: sensorData.gnss.heading ?? 0
   });
 
-  // Update targets when sensor data arrives
   useEffect(() => {
     const lat = sensorData.gnss.latitude;
     const lng = sensorData.gnss.longitude;
@@ -53,7 +49,6 @@ export function useAnimatedVesselPosition() {
 
       let changed = false;
 
-      // 1. Animate Position
       const dLat = target.lat - current.lat;
       const dLng = target.lng - current.lng;
       const dist = Math.sqrt(dLat * dLat + dLng * dLng);
@@ -63,12 +58,10 @@ export function useAnimatedVesselPosition() {
         current.lng += dLng * LERP_POS;
         changed = true;
       } else {
-        // Snap to target if very close to prevent micro-jitter
         current.lat = target.lat;
         current.lng = target.lng;
       }
 
-      // 2. Animate Heading (shortest path)
       let hDiff = ((target.heading - current.heading + 540) % 360) - 180;
       if (Math.abs(hDiff) > 0.01) {
         current.heading += hDiff * LERP_HEADING;
@@ -78,8 +71,6 @@ export function useAnimatedVesselPosition() {
         current.heading = target.heading;
       }
 
-      // Always update state to ensure synchronization with the loop, 
-      // but 'changed' helps optimize if we wanted to throttle.
       setAnimatedPos({ 
         lat: current.lat, 
         lng: current.lng, 

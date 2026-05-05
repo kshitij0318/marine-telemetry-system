@@ -21,16 +21,13 @@ export function exportMissionToCSV(
 ): string {
   let csv = 'SECTION,TYPE,DATA1,DATA2,DATA3,DATA4,DATA5\n';
   
-  // Section 1: Info
   csv += `INFO,VERSION,1.0,,,,\n`;
   csv += `INFO,EXPORT_DATE,${new Date().toISOString()},,,,\n`;
   
-  // Section 2: Zones
   zones.forEach(z => {
     csv += `ZONE,${z.id},${z.area},${z.visible},${JSON.stringify(z.points).replace(/,/g, ';')},,\n`;
   });
   
-  // Section 3: Waypoints
   waypoints.forEach(w => {
     const actionsJson = w.actions ? JSON.stringify(w.actions).replace(/,/g, ';') : '';
     csv += `WAYPOINT,${w.id},${w.name},${w.lat},${w.lng},${actionsJson},\n`;

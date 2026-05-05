@@ -12,24 +12,20 @@ export function useRingBuffer(value: number | undefined | null, size = 120, inte
   const lastWrite = useRef(0);
   const [snapshot, setSnapshot] = useState<{time: number, value: number}[]>([]);
 
-  // 1. Efficiently push new values into the ref-based buffer
   useEffect(() => {
     if (value === undefined || value === null || !isFinite(value)) return;
     
     const now = Date.now();
     const point = { t: now, v: +value.toFixed(3) };
     
-    // Efficiently maintain ring buffer
     if (buf.current.length >= size) {
       buf.current.shift();
     }
     buf.current.push(point);
   }, [value, size]);
 
-  // 2. interval-based snapshot update (The actual performance fix)
   useEffect(() => {
     const timer = setInterval(() => {
-      // Only set state if the buffer actually has data
       if (buf.current.length > 0) {
         setSnapshot([...buf.current]);
       }

@@ -34,7 +34,6 @@ function Sparkline({ data, color }: { data: any[], color: string }) {
   );
 }
 
-// OAS sensor definitions — matches radarSimulator.js OAS_SENSORS
 const OAS_SENSORS = [
   { id: 'OAS-CAM-1', label: 'Bow',          fovDeg: 60, maxRangeM: 500, bearingCenter: 0   },
   { id: 'OAS-CAM-2', label: 'Stbd Bow',     fovDeg: 60, maxRangeM: 500, bearingCenter: 60  },

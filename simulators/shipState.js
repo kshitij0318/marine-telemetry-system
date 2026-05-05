@@ -1,7 +1,6 @@
 const EventEmitter = require("events");
 const turf = require("@turf/turf");
 
-// Angular shortest-path lerp — prevents 359°→0° snap
 function lerpAngle(current, target, factor) {
   const delta = ((target - current + 540) % 360) - 180;
   return (current + delta * factor + 360) % 360;
@@ -10,7 +9,6 @@ function lerpAngle(current, target, factor) {
 class ShipState extends EventEmitter {
   constructor() {
     super();
-    // Position
     this.lat = 18.9000;
     this.lng = 72.5000;
     this.heading = 45; // degrees, 0=N, clockwise
@@ -22,7 +20,6 @@ class ShipState extends EventEmitter {
     this.roll = 0;
     this._lastHeading = 45;
 
-    // Mission & Routing
     this.missionActive = false;
     this.missionOwner = null; // 'navigation' | 'mission' | null
     this.waypoints = [];
@@ -33,19 +30,15 @@ class ShipState extends EventEmitter {
     this.distanceRemaining = 0;
     this.etaSeconds = 0;
     
-    // Environmental State (Shared)
     this.depth = 20;
 
-    // Events flags
     this.justReachedWaypoint = false;
     this.justCompletedMission = false;
 
-    // Speed target for drift lerping
     this._speedTarget = 0;
     this._tickCount = 0;
   }
 
-  // Master tick — 100ms — ONLY place position updates
   masterTick(waterRouter, pathSplitter) {
     this._tickCount++;
     this.justReachedWaypoint = false;
@@ -60,49 +53,39 @@ class ShipState extends EventEmitter {
       this.runHeadingDrift();
     }
 
-    // Geofence enforcement
     this.enforceGeofences();
 
-    // Dead reckoning — single authoritative position update
     const dt = 0.1; // 100ms in seconds
     const distM = this.speedMs * dt;
     this.lat += (distM * Math.cos(this.headingRad)) / 111320;
     this.lng += (distM * Math.sin(this.headingRad)) / (111320 * Math.cos(this.lat * Math.PI / 180));
 
-    // Dynamic Depth (Seafloor mapping based on lat/lng)
     const seafloor = 50 + 20 * Math.sin(this.lat * 500) * Math.cos(this.lng * 500);
     this.depth += (seafloor - this.depth) * 0.01;
 
-    // Recompute derived stats
     if (this.missionActive && this.routePoints.length > 0) {
       this.distanceRemaining = this.computeRouteDistanceFromIndex(this.routePoints, this.currentWaypointIndex);
       this.etaSeconds = this.speedMs > 0 ? this.distanceRemaining / this.speedMs : 0;
     }
 
-    // Dynamic Attitude Simulation (Pitch/Roll)
     const t = Date.now() / 1000;
     let turnRate = this.heading - this._lastHeading;
     if (turnRate > 180) turnRate -= 360;
     if (turnRate < -180) turnRate += 360;
     this._lastHeading = this.heading;
 
-    // Pitch: Base wave (±2 deg) + bow rise from speed
     this.pitch = Math.sin(t * 0.8) * 2 + (this.speedMs * 0.3);
     
-    // Roll: Base wave (±3 deg) + heel from turning
     this.roll = Math.sin(t * 0.6) * 3 - (turnRate * 3.0);
 
-    // Emit event so simulators can react
     this.emit("tick", this);
   }
 
   runHeadingDrift() {
     const t = Date.now() / 1000;
-    // Gentle sinusoidal heading drift — realistic ocean steering
     this.heading += 0.3 * Math.sin(t / 40);
     this.heading = ((this.heading % 360) + 360) % 360;
 
-    // Speed: lerp toward idle speed
     this._speedTarget = 1.5 + 0.5 * Math.sin(t / 100);
     this.speed += (this._speedTarget - this.speed) * 0.03;
   }
@@ -112,7 +95,6 @@ class ShipState extends EventEmitter {
 
     const WAYPOINT_ARRIVAL_RADIUS_M = 30;
 
-    // Find nearest point on route ahead of current position
     const target = this.routePoints[this.currentWaypointIndex];
     if (!target) {
       this.missionActive = false;
@@ -120,7 +102,6 @@ class ShipState extends EventEmitter {
       return;
     }
 
-    // Distance to current route point
     const dLat = (target.lat - this.lat) * 111320;
     const dLng = (target.lng - this.lng) * 111320 * Math.cos(this.lat * Math.PI / 180);
     const distM = Math.sqrt(dLat * dLat + dLng * dLng);
@@ -131,13 +112,10 @@ class ShipState extends EventEmitter {
       return;
     }
 
-    // Bearing to target
     const targetBearing = (Math.atan2(dLng, dLat) * 180 / Math.PI + 360) % 360;
 
-    // Steer: max 1.5°/tick — smooth turn
     this.heading = lerpAngle(this.heading, targetBearing, 0.06);
 
-    // Speed: maintain mission speed, slow near waypoints
     const approachFactor = Math.min(1, distM / 100);
     const missionSpeed = 5 + approachFactor * 2; // 5-7 kts during mission
     this.speed += (missionSpeed - this.speed) * 0.04;
@@ -146,12 +124,10 @@ class ShipState extends EventEmitter {
   computeRouteDistanceFromIndex(route, fromIndex) {
     if (fromIndex >= route.length) return 0;
     let dist = 0;
-    // Distance from vessel to first point
     const dLat = (route[fromIndex].lat - this.lat) * 111320;
     const dLng = (route[fromIndex].lng - this.lng) * 111320 * Math.cos(this.lat * Math.PI / 180);
     dist += Math.sqrt(dLat * dLat + dLng * dLng);
 
-    // Accumulate rest of the route
     for (let i = fromIndex; i < route.length - 1; i++) {
         const dLat = (route[i + 1].lat - route[i].lat) * 111320;
         const dLng = (route[i + 1].lng - route[i].lng) * 111320 * Math.cos(route[i].lat * Math.PI / 180);
@@ -167,7 +143,6 @@ class ShipState extends EventEmitter {
       const inside = this.isPointInsidePolygon(this.lat, this.lng, fence.points);
       
       if (fence.mode === 'exclusion' && inside) {
-        // Emergency: reverse heading
         this.heading = (this.heading + 180) % 360;
         console.warn(`[GEOFENCE] BREACH: Vessel entered exclusion zone ${fence.label}. Reversing heading.`);
         this.emit("alert", { 
@@ -178,7 +153,6 @@ class ShipState extends EventEmitter {
       }
       
       if (fence.mode === 'containment' && !inside) {
-        // Steer back toward centroid
         const centroid = this.computeCentroid(fence.points);
         const bearingBack = this.bearingTo(this.lat, this.lng, centroid.lat, centroid.lng);
         this.heading = lerpAngle(this.heading, bearingBack, 0.1);
@@ -221,6 +195,5 @@ class ShipState extends EventEmitter {
   }
 }
 
-// Global instance
 const shipState = new ShipState();
 module.exports = shipState;

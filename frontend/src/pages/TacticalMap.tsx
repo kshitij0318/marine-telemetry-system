@@ -12,8 +12,6 @@ export function renderTacticalMap({
 }: MapRendererProps) {
   const vesselPos = latLngToCanvas(vesselPosition.lat, vesselPosition.lng);
 
-  // Threat radius circles
-  // Feature 7: Aligned threat colors with RadarDisplay.tsx marine-dark theme
   sensorData.radar.targets?.forEach((target: any) => {
     const threatRadii: Record<string, number> = { low: 50, medium: 100, high: 150 };
     const radius = threatRadii[target.threat] || 50;
@@ -26,7 +24,6 @@ export function renderTacticalMap({
     ctx.beginPath();
     ctx.arc(px, py, radius, 0, 2 * Math.PI);
     
-    // Feature 7 standardized hex codes
     if (target.threat === 'high' || target.threat === 'critical') ctx.strokeStyle = '#f87171';
     else if (target.threat === 'medium') ctx.strokeStyle = '#fbbf24';
     else ctx.strokeStyle = '#4ade80';
@@ -37,7 +34,6 @@ export function renderTacticalMap({
     ctx.setLineDash([]);
   });
 
-  // Current drift vector
   const currentSpeed = sensorData.currentMeter.speed;
   const currentDirection = ((sensorData.currentMeter.direction - 90) * Math.PI) / 180;
   const driftLength = currentSpeed * 30;
@@ -46,7 +42,6 @@ export function renderTacticalMap({
   ctx.translate(vesselPos.x, vesselPos.y);
   ctx.rotate(currentDirection);
   
-  // Animated dashed line
   const dashOffset = (Date.now() / 50) % 15;
   ctx.beginPath();
   ctx.moveTo(0, 0);
@@ -58,7 +53,6 @@ export function renderTacticalMap({
   ctx.stroke();
   ctx.setLineDash([]);
   
-  // Arrow head
   ctx.beginPath();
   ctx.moveTo(driftLength, 0);
   ctx.lineTo(driftLength - 8, -5);
@@ -69,7 +63,6 @@ export function renderTacticalMap({
   
   ctx.restore();
   
-  // Current vector label
   ctx.fillStyle = '#00ff41';
   ctx.font = '11px monospace';
   ctx.fillText(`${currentSpeed.toFixed(1)} m/s`, vesselPos.x + driftLength * Math.cos(currentDirection) + 10, vesselPos.y + driftLength * Math.sin(currentDirection));

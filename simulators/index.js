@@ -8,8 +8,6 @@ const RadarSimulator = require("./radar/radarSimulator");
 
 const vesselId = process.env.VESSEL_ID || "V001";
 
-// Feature 8: Start position driven by env vars — relocate simulation anywhere.
-// Set VESSEL_START_LAT / VESSEL_START_LNG to move the ship to any coordinate.
 const START_LAT = 18.9000;
 const START_LNG = 72.5000;
 
@@ -17,17 +15,16 @@ const shipState = require("./shipState");
 const waterRouter = require("./waterRouter");
 const pathSplitter = require("./pathSplitter");
 
-const client = mqtt.connect("mqtt://localhost:1883");
+const MQTT_URL = process.env.MQTT_BROKER_URL || "mqtt://localhost:1883";
+const client = mqtt.connect(MQTT_URL);
 
 client.on("connect", () => {
   console.log(`Physics Engine Connected. Launching coherent simulations for ${vesselId}`);
 
-  // The master physics tick
   setInterval(() => {
     shipState.masterTick(waterRouter, pathSplitter); 
   }, 100);
 
-  // Core Command Handlers
   client.subscribe("COMMANDS/MISSION");
   client.subscribe("COMMANDS/NAVIGATION");
 
@@ -43,11 +40,8 @@ client.on("connect", () => {
           shipState.currentWaypointIndex = 0;
           shipState.missionActive = true;
           
-          // Phase 2 & 4: Water-Only Routing Engine + Path Splitter
-          // Wait for async routing before applying dynamically computed route Points
           let rawRoute = await waterRouter.computeWaterRoute(shipState.lat, shipState.lng, shipState.waypoints);
           
-          // Apply avoidance zone dynamic path splitting
           shipState.routePoints = pathSplitter.computeReroutedPath(rawRoute, shipState.avoidanceZones);
           
         } else if (cmd.type === "STOP_MISSION") {
@@ -61,7 +55,6 @@ client.on("connect", () => {
           shipState.avoidanceZones = []; // Nav mode usually doesn't have custom zones set via the UI immediately
           shipState.currentWaypointIndex = 0;
 
-          // Compute water-only route
           let rawRoute = await waterRouter.computeWaterRoute(shipState.lat, shipState.lng, shipState.waypoints);
           shipState.routePoints = rawRoute;
           
@@ -76,7 +69,6 @@ client.on("connect", () => {
     }
   });
 
-  // Initialize and attach standard simulators to the shared memory bus
   GNSSSimulator.start(client, vesselId, shipState);
   CTDSimulator.start(client, vesselId, shipState);
   CurrentMeterSimulator.start(client, vesselId, shipState);

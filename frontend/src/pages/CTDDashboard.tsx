@@ -47,7 +47,6 @@ export default function CTDDashboard() {
   const depthHistory = useRingBuffer(sensorData.ctd.depth, 60, 1000);
   const tempHistory = useRingBuffer(sensorData.ctd.temperature, 60, 1000);
 
-  // Vertical profile data (mocked from current state)
   const profileData = [
     { depth: 0, temp: sensorData.ctd.temperature },
     { depth: 10, temp: sensorData.ctd.temperature - 2 },

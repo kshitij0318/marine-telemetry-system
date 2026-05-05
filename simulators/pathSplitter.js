@@ -14,7 +14,6 @@ function computeReroutedPath(originalRoute, zones) {
 }
 
 function rerouteAroundZone(route, zone) {
-  // Ensure polygon ring is closed for Turf.js
   const zoneCoords = zone.points.map(p => [p.lng, p.lat]);
   if (
     zoneCoords[0][0] !== zoneCoords[zoneCoords.length - 1][0] || 
@@ -33,14 +32,12 @@ function rerouteAroundZone(route, zone) {
       [route[i+1].lng, route[i+1].lat]
     ]);
     
-    // Check if the current line segment intersects the avoidance zone
     if (!turf.booleanIntersects(segLine, zonePoly)) {
       result.push(route[i]);
       i++;
       continue;
     }
     
-    // Find where path enters and exits the zone
     let exitIndex = i + 1;
     while (exitIndex < route.length - 1) {
       const nextSeg = turf.lineString([
@@ -51,7 +48,6 @@ function rerouteAroundZone(route, zone) {
       exitIndex++;
     }
     
-    // Compute bypass: go around zone boundary
     const entryPoint = route[i];
     const exitPoint = route[exitIndex];
     const bypass = computeZoneBypass(entryPoint, exitPoint, zonePoly);
@@ -66,12 +62,9 @@ function rerouteAroundZone(route, zone) {
 }
 
 function computeZoneBypass(entry, exit, zonePoly) {
-  // Buffer zone slightly for clearance
   const buffered = turf.buffer(zonePoly, 0.05, { units: 'degrees' });
   const coords = buffered.geometry.coordinates[0];
   
-  // Find two paths around zone boundary: clockwise and counter-clockwise
-  // Pick the one with shorter total distance from entry to exit
   const leftPath = routeAlongBoundary(coords, entry, exit, 'left');
   const rightPath = routeAlongBoundary(coords, entry, exit, 'right');
   
@@ -81,15 +74,11 @@ function computeZoneBypass(entry, exit, zonePoly) {
   return leftDist < rightDist ? leftPath : rightPath;
 }
 
-// Naive implementation for routing along boundary
 function routeAlongBoundary(boundaryCoords, entry, exit, direction) {
-    // A highly advanced implementation would snap the entry/exit points to the closest edges.
-    // Here we will just use a generic subset of coordinates
     let path = [];
     const step = direction === 'left' ? 1 : boundaryCoords.length - 1;
     let idx = 0;
     
-    // Just inject standard perimeter points
     for(let i=0; i<boundaryCoords.length; i+=2) {
        path.push({lng: boundaryCoords[i][0], lat: boundaryCoords[i][1]});
     }

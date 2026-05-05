@@ -12,7 +12,6 @@ const cache = new Map<string, boolean>();
 
 /** Returns true if the coordinate is on water (open ocean, sea, bay, lake, river, etc.) */
 export async function isOnWater(lat: number, lng: number): Promise<boolean> {
-  // Basic range validation — removed all regional restrictions (Feature 4)
   if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return false;
 
   const key = `${lat.toFixed(4)},${lng.toFixed(4)}`;
@@ -25,20 +24,17 @@ export async function isOnWater(lat: number, lng: number): Promise<boolean> {
     });
 
     if (!res.ok) {
-      // API down — fail-open (don't block placement)
       cache.set(key, true);
       return true;
     }
 
     const data = await res.json();
 
-    // Nominatim explicitly returns {error: "Unable to geocode"} for open ocean
     if (data.error) {
       cache.set(key, true);
       return true;
     }
 
-    // Globally consistent water type/class codes from Nominatim
     const waterTypes = new Set([
       'water', 'bay', 'sea', 'ocean', 'strait', 'river', 'lake', 'canal',
       'reservoir', 'harbour', 'fjord', 'lagoon', 'tidal_flat', 'wetland',
@@ -49,7 +45,6 @@ export async function isOnWater(lat: number, lng: number): Promise<boolean> {
     const cls:  string  = (data.class ?? '').toLowerCase();
     const name: string  = (data.display_name ?? '').toLowerCase();
 
-    // class=natural + type=water → definite water body
     if (cls === 'natural' && waterTypes.has(type)) {
       cache.set(key, true);
       return true;
@@ -63,20 +58,17 @@ export async function isOnWater(lat: number, lng: number): Promise<boolean> {
       return true;
     }
 
-    // Display name keyword fallback (works globally for named seas/oceans)
     const waterKeywords = ['sea', 'ocean', 'bay', 'gulf', 'strait', 'channel', 'harbour', 'lake', 'river'];
     if (waterKeywords.some(kw => name.includes(kw))) {
       cache.set(key, true);
       return true;
     }
 
-    // If Nominatim returned a road/building/place → it's land
     const result = false;
     cache.set(key, result);
     return result;
 
   } catch {
-    // Network error — fail-open (never block placement on connectivity issues)
     cache.set(key, true);
     return true;
   }

@@ -4,7 +4,6 @@ import { useTelemetry } from '../../contexts/TelemetryContext';
 import { Bell, CheckCircle, AlertTriangle, AlertCircle, Info, Shield } from 'lucide-react';
 import { Button } from './ui/button';
 
-// Unified severity mapping for backend alerts (uses different severity labels)
 function mapBackendSeverity(sev: string): 'high' | 'medium' | 'low' {
   if (sev === 'critical') return 'high';
   if (sev === 'warning') return 'medium';
@@ -16,7 +15,6 @@ export function NotificationFeed() {
   const { alerts: backendAlerts } = useTelemetry();
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
 
-  // Merge backend alerts into a unified list; backend alerts have title+message, frontend only message
   const backendMapped = backendAlerts
     .filter(a => !dismissedIds.has(a.id))
     .map(a => ({
@@ -30,7 +28,6 @@ export function NotificationFeed() {
       fromBackend: true,
     }));
 
-  // Merge & sort by timestamp descending
   const allNotifications = [
     ...backendMapped,
     ...notifications.map(n => ({ ...n, title: null, fromBackend: false })),

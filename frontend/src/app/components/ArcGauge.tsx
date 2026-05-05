@@ -29,20 +29,17 @@ export function ArcGauge({ value, min, max, label, unit, size = 200, color = '#0
     const endAngle = 2.25 * Math.PI;
 
     const animate = () => {
-      // Smooth animation towards target value
       const diff = value - currentValueRef.current;
       currentValueRef.current += diff * 0.1;
 
       ctx.clearRect(0, 0, size, size);
 
-      // Background arc
       ctx.beginPath();
       ctx.arc(centerX, centerY, radius, startAngle, endAngle);
       ctx.lineWidth = 12;
       ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
       ctx.stroke();
 
-      // Value arc
       const valueAngle = startAngle + ((currentValueRef.current - min) / (max - min)) * (endAngle - startAngle);
       ctx.beginPath();
       ctx.arc(centerX, centerY, radius, startAngle, valueAngle);
@@ -53,7 +50,6 @@ export function ArcGauge({ value, min, max, label, unit, size = 200, color = '#0
       ctx.stroke();
       ctx.shadowBlur = 0;
 
-      // Needle
       const needleAngle = valueAngle;
       const needleLength = radius - 10;
       ctx.beginPath();
@@ -66,7 +62,6 @@ export function ArcGauge({ value, min, max, label, unit, size = 200, color = '#0
       ctx.strokeStyle = color;
       ctx.stroke();
 
-      // Center circle
       ctx.beginPath();
       ctx.arc(centerX, centerY, 6, 0, 2 * Math.PI);
       ctx.fillStyle = color;
