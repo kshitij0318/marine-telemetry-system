@@ -62,7 +62,8 @@ try:
                 "stbd": math.cos(tick / 8) * 15
             }
         }
-        client.publish(f"vessel/{VESSEL_ID}/thruster", json.dumps(thruster_payload))
+        # Uncomment to test Thruster dashboard
+        # client.publish(f"vessel/{VESSEL_ID}/thruster", json.dumps(thruster_payload))
 
         # CTD Payload
         ctd_payload = {
@@ -73,7 +74,8 @@ try:
             "pressure": 5.0,
             "status": "active"
         }
-        client.publish(f"vessel/{VESSEL_ID}/ctd", json.dumps(ctd_payload))
+        # Uncomment to test CTD dashboard
+        # client.publish(f"vessel/{VESSEL_ID}/ctd", json.dumps(ctd_payload))
 
         # Current Meter Payload
         current_payload = {
@@ -87,7 +89,20 @@ try:
             "turbidity": 2.0,
             "status": "active"
         }
-        client.publish(f"vessel/{VESSEL_ID}/currentMeter", json.dumps(current_payload))
+        # Uncomment to test Current Meter dashboard
+        # client.publish(f"vessel/{VESSEL_ID}/currentMeter", json.dumps(current_payload))
+        
+        # Radar Payload
+        radar_payload = {
+            "range": 24.0,
+            "targets": [
+                { "id": 1, "distance": 2.5, "bearing": 45.0 + (tick % 10) },
+                { "id": 2, "distance": 12.0, "bearing": 320.0 }
+            ],
+            "status": "active"
+        }
+        # Uncomment to test Radar dashboard
+        # client.publish(f"vessel/{VESSEL_ID}/radar", json.dumps(radar_payload))
         
         tick += 1
         time.sleep(1)
