@@ -3,9 +3,10 @@ import { useTelemetry } from '../contexts/TelemetryContext';
 import { Card } from '../app/components/ui/card';
 import { ArcGauge } from '../app/components/ArcGauge';
 import { LineChart, Line, ResponsiveContainer, YAxis } from 'recharts';
-import { Fan, Zap, Thermometer, Activity, CheckCircle, AlertTriangle, Cpu, Gauge } from 'lucide-react';
+import { Fan, Zap, Thermometer, Activity, CheckCircle, AlertTriangle, Cpu, Gauge, Navigation2 } from 'lucide-react';
 import { Progress } from '../app/components/ui/progress';
 import { useRingBuffer } from '../hooks/useRingBuffer';
+import { FinControlDisplay } from '../app/components/thruster/FinControlDisplay';
 
 function Sparkline({ data, color }: { data: any[], color: string }) {
   return (
@@ -232,6 +233,17 @@ export default function ThrusterDashboard() {
       {selectedThruster !== 'all' && displayed.map((t: any) => (
         <ThrusterDetailPanel key={t.id} thruster={t} />
       ))}
+
+      <Card className="bg-marine-surface border border-marine-border p-5 shadow-2xl">
+        <h3 className="text-xs font-bold text-marine-text uppercase tracking-wider flex items-center gap-2 mb-4">
+          <Navigation2 className="w-4 h-4 text-marine-accent" />
+          Fin Control Status
+        </h3>
+        <FinControlDisplay 
+          fins={sensorData.thruster.fins ?? { fore:0, aft:0, port:0, stbd:0 }} 
+          vesselHeading={sensorData.gnss?.heading ?? 0}
+        />
+      </Card>
     </div>
   );
 }

@@ -39,10 +39,10 @@ export const VesselMarker = React.memo(() => {
       if (el) {
           const currentTransform = el.style.transform;
           const rotateMatch = currentTransform.match(/rotate\([^)]+\)/);
-          const newTransform = currentTransform.replace(/rotate\([^)]+\)/, '') + ` rotate(${Math.round(heading)}deg)`;
+          const newTransform = currentTransform.replace(/rotate\([^)]+\)/, '') + ` rotate(${Math.round(heading - 90)}deg)`;
           
           if (!rotateMatch) {
-              el.style.transform = currentTransform + ` rotate(${Math.round(heading)}deg)`;
+              el.style.transform = currentTransform + ` rotate(${Math.round(heading - 90)}deg)`;
           } else {
               el.style.transform = newTransform;
           }

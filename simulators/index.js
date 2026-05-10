@@ -1,3 +1,9 @@
+if (process.env.DISABLE_SIMULATORS === 'true') {
+  console.log('[SIM] All simulators disabled. Waiting for external MQTT data.');
+  // Keep process alive so Docker doesn't restart it, but do nothing
+  setInterval(() => {}, 1000 * 60 * 60);
+} else {
+
 const mqtt = require("mqtt");
 const topics = require("../shared/constants/topics");
 const GNSSSimulator = require("./gnss/GNSSSimulator");
@@ -75,3 +81,4 @@ client.on("connect", () => {
   ThrusterSimulator.start(client, vesselId, shipState);
   RadarSimulator.start(client, vesselId, shipState);
 });
+}

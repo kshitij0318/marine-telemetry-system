@@ -3,23 +3,23 @@ import { Link, useLocation } from 'react-router';
 import { Ship, Map, Satellite, Droplet, Waves, Fan, Radio, Settings, Package } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
 
+import { PAGE_CONFIG } from '../../config/pageVisibility';
+
 interface NavItem {
   icon: React.ComponentType<{ className?: string }>;
   label: string;
   path: string;
 }
 
-const navItems: NavItem[] = [
-  { icon: Ship, label: 'Fleet', path: '/fleet' },
-  { icon: Map, label: 'Maps', path: '/map' },
-  { icon: Satellite, label: 'GNSS', path: '/gnss' },
-  { icon: Droplet, label: 'CTD', path: '/ctd' },
-  { icon: Waves, label: 'Current Meter', path: '/current-meter' },
-  { icon: Fan, label: 'Thruster', path: '/thruster' },
-  { icon: Radio, label: 'Radar', path: '/radar' },
-  { icon: Package, label: 'Payload', path: '/payload' },
-  { icon: Settings, label: 'Settings', path: '/settings' },
-];
+const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
+  Ship, Map, Satellite, Droplet, Waves, Fan, Radio, Package, Settings
+};
+
+const navItems: NavItem[] = PAGE_CONFIG.filter(p => p.enabled).map(p => ({
+  icon: iconMap[p.icon],
+  label: p.label,
+  path: p.path
+}));
 
 export const Sidebar = React.memo(() => {
   const [isExpanded, setIsExpanded] = useState(false);
