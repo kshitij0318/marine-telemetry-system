@@ -144,6 +144,18 @@ You should see the Marine Telemetry dashboard with live vessel data.
 
 ---
 
+### Step A5 — Open the app
+
+Open a browser and go to:
+
+```
+http://localhost:3000
+```
+
+You should see the Marine Telemetry dashboard with live vessel data.
+
+---
+
 ### Stopping the system
 
 ```
@@ -331,6 +343,25 @@ Fix: Always add `--legacy-peer-deps` when running npm install:
 
 ```
 npm install --legacy-peer-deps
+```
+
+---
+
+**Error: Docker build fails with `npm ci` lockfile mismatch**
+
+```
+npm error Invalid: lock file's react@19.2.4 does not satisfy react@18.3.1
+```
+
+Cause: The `package-lock.json` was generated with a different version of packages than what `package.json` now declares. This happens after dependencies are pinned.
+
+Fix: Run `npm install` inside the `frontend` folder first to regenerate the lockfile, then retry the Docker build:
+
+```
+cd frontend
+npm install --legacy-peer-deps
+cd ..
+docker compose up --build -d
 ```
 
 ---
