@@ -115,6 +115,48 @@ npm run electron:dev
 
 ---
 
+## 🧪 Testing with External MQTT Payloads
+
+You can disable the internal Node.js physics engine and test the dashboard with external telemetry payloads (e.g., from a Python script or MQTT Explorer).
+
+1. **Disable Internal Simulators**: Set `DISABLE_SIMULATORS=true` in your root `.env` file and restart Docker, or prefix your local run command:
+   ```bash
+   DISABLE_SIMULATORS=true npm run start:all
+   ```
+2. **Inject Payloads**: Ensure your broker is running (`localhost:1883`) and publish telemetry directly to the corresponding topics. 
+
+**Using the included Python Simulator:**
+```bash
+# Ensure paho-mqtt is installed (using python3 on macOS to bypass Homebrew environment restrictions)
+python3 -m pip install paho-mqtt --break-system-packages
+# Run the script
+python3 marine_sensor_simulator.py
+```
+
+**Using MQTT Explorer (Manual JSON):**
+Publish to `vessel/V001/gnss`:
+```json
+{
+  "latitude": 18.9220, "longitude": 72.8347,
+  "heading": 90.0, "speed": 7.5,
+  "satellites": 10, "hdop": 1.1, "fixType": "DGPS",
+  "status": "active", "timestamp": 1700000000000
+}
+```
+
+---
+
+## 👁️ Customizing Page Visibility
+
+You can show or hide specific dashboard pages dynamically without requiring a system restart. This is useful when testing specific sensors or tailoring the UI for specific mission roles.
+
+1. Open `frontend/src/config/pageVisibility.ts`.
+2. Find the `PAGE_CONFIG` array.
+3. Toggle the `enabled` boolean flag to `true` or `false` for any given page.
+4. If you are using `npm run dev`, Vite's Hot Module Replacement (HMR) will instantly update the sidebar and routing logic. (Note: Ensure the `fleet` page remains enabled as a fallback).
+
+---
+
 ## 📁 Folder Structure
 
 ```text
