@@ -35,65 +35,65 @@ The system operates across four primary decoupled layers:
 
 ## 🚀 Quick Start (Production via Docker)
 
-The easiest way to run the entire stack on any fresh machine is via Docker Compose.
+> **Prerequisites**: [Docker Desktop](https://www.docker.com/products/docker-desktop/) only. No Node.js required for this path.
 
-1. **Install Prerequisites**:
-   Ensure you have [Docker](https://docs.docker.com/get-docker/) and [Docker Compose](https://docs.docker.com/compose/install/) installed.
+```bash
+# 1. Clone
+git clone https://github.com/kshitij0318/marine-telemetry-system.git
+cd marine-telemetry-system
 
-2. **Clone the Repository**:
-   ```bash
-   git clone https://github.com/kshitij0318/marine-telemetry-system.git
-   cd marine-telemetry-system
-   ```
+# 2. Copy environment files (defaults work out-of-the-box)
+cp .env.example .env
+cp frontend/.env.example frontend/.env
 
-3. **Configure Environment**:
-   Copy the example environment files.
-   ```bash
-   cp .env.example .env
-   cp frontend/.env.example frontend/.env
-   ```
+# 3. Build and start all 4 services (MQTT, Backend, Simulators, Frontend)
+docker-compose up --build -d
+```
 
-4. **Build and Launch**:
-   ```bash
-   docker-compose up --build -d
-   ```
+Once running, open your browser:
+- **Web UI**: `http://localhost:3000`
+- **Backend API / WebSocket**: `http://localhost:5001`
+- **MQTT Broker**: `localhost:1883`
 
-5. **Access the System**:
-   - Web Interface: `http://localhost:3000`
-   - WebSocket API: `ws://localhost:5001`
-   - MQTT Broker: `localhost:1883`
+To view live service logs:
+```bash
+docker-compose logs -f
+```
+
+To stop the system:
+```bash
+docker-compose down
+```
 
 ---
 
-## 💻 Local Development Setup
+## 💻 Local Development Setup (For Contributors)
 
-If you wish to develop without Docker:
+> Requires **Node.js 20+** and a running local MQTT broker.
 
-1. **Install Dependencies**:
-   ```bash
-   npm install
-   cd frontend && npm install && cd ..
-   ```
+```bash
+# 1. Install root dependencies
+npm install
 
-2. **Start the MQTT Broker**:
-   You must have a local broker running (e.g., Mosquitto).
-   ```bash
-   docker run -it -p 1883:1883 eclipse-mosquitto
-   ```
+# 2. Install frontend dependencies
+cd frontend && npm install && cd ..
 
-3. **Launch the Stack**:
-   ```bash
-   # Terminal 1: Starts Node Backend & Simulators
-   npm run start:all
+# 3. Start a local MQTT broker (requires Docker)
+docker run -d -p 1883:1883 eclipse-mosquitto:2.0
 
-   # Terminal 2: Starts Vite Frontend
-   cd frontend && npm run dev
-   ```
+# 4. Start the backend + simulators (Terminal 1)
+npm run start:all
 
-4. **(Optional) Run Electron Desktop App**:
-   ```bash
-   npm run electron:dev
-   ```
+# 5. Start the frontend dev server (Terminal 2)
+cd frontend && npm run dev
+```
+
+The frontend will be available at `http://localhost:5173`.
+
+**(Optional) Run Electron Desktop App**:
+```bash
+npm run electron:dev
+```
 
 ---
 
@@ -132,15 +132,34 @@ If you wish to develop without Docker:
 
 ---
 
-## 🛟 Troubleshooting
+## 🛟 Common Errors & Fixes
 
-- **No Data in UI**: 
-  - Ensure the WebSocket URL (`VITE_WS_URL`) in `frontend/.env` correctly points to the backend port (e.g., `5001`).
-  - Verify the Mosquitto broker is running and exposed on port `1883`.
-- **Port Conflicts**:
-  - If `5001`, `3000`, or `1883` are in use, update your `.env` files and `docker-compose.yml` to map to available ports.
-- **Docker Rebuild Issues**:
-  - If you change package dependencies, force a clean build: `docker-compose up --build --force-recreate`.
+**Docker: Build fails on first run / COPY conflict errors**
+```
+cannot replace to directory [...]/node_modules/... with file
+```
+This happens when Docker is sending a stale local `node_modules` folder into the build context. Fix: the `.dockerignore` files in the repo now prevent this. If you still see it, clear Docker's volume cache first and retry:
+```bash
+docker-compose down -v
+docker-compose up --build
+```
+
+**npm: ERESOLVE peer dependency error on local install**
+```
+npm ERR! code ERESOLVE
+npm ERR! peer react@"^19.2.4" from react-dom...
+```
+This happens on a clean machine without a lockfile cache. All versions in `package.json` are now pinned exactly. If you still see this, run:
+```bash
+cd frontend && npm install --legacy-peer-deps
+```
+
+**No Data in UI**
+- Ensure `VITE_WS_URL` in `frontend/.env` correctly points to the backend (e.g., `ws://localhost:5001`).
+- Verify the Mosquitto broker is running on port `1883`.
+
+**Port Conflicts**
+- If `5001`, `3000`, or `1883` are in use, update your `.env` and `docker-compose.yml` to map to available ports.
 
 ---
 
