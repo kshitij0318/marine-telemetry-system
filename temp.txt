@@ -1,6 +1,0 @@
-landing page is a dashboard - consolidated view is the main focus - depth should be sorted out and choose only one as the main value
-redirect to the specific sensors
-try and integrate a db - for getting passively generated values from before - data shouldnt only be represented when we start the dashboard
-map - lat long for current position of the vehicle    
-
-git add .
