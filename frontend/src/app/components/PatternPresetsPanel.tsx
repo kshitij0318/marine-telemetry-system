@@ -12,6 +12,7 @@ import {
   generateRadial, 
   generateCrosshatch 
 } from '../../utils/surveyPatterns';
+import { FeatureInfoHover } from './ui/feature-info-hover';
 
 interface PatternPresetsPanelProps {
   vesselPos: { lat: number; lng: number };
@@ -98,6 +99,15 @@ export default function PatternPresetsPanel({
         <h3 className="text-[10px] font-bold text-white/80 uppercase tracking-widest flex items-center gap-1.5">
           <div className="w-1.5 h-1.5 rounded-full bg-marine-accent animate-pulse"></div>
           Survey Patterns
+          <FeatureInfoHover 
+            title="Survey Patterns"
+            description="Automated grid generation for seabed mapping and systematic coverage."
+            features={[
+              { label: 'Lawnmower', detail: 'Parallel tracks ideal for full sonar coverage over rectangular areas.', color: '#00d4ff' },
+              { label: 'Expanding Square', detail: 'Outward spiraling search pattern starting from a central datum.', color: '#00ff9d' },
+              { label: 'Geofence Aware', detail: 'Patterns are automatically clipped and conformed to active geofences.', color: '#3b82f6' }
+            ]}
+          />
         </h3>
         <Button 
           size="sm" 

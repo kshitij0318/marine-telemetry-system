@@ -25,7 +25,7 @@ import { exportMissionToCSV, importMissionFromCSV } from '../utils/missionCSV';
 import { Geofence, GeofenceMode } from '../types/geofence';
 import { validateWaypointAgainstGeofences, filterWaypointsByGeofences } from '../utils/geofenceValidator';
 import { toast } from 'sonner';
-
+import { FeatureInfoHover } from '../app/components/ui/feature-info-hover';
 interface Waypoint {
   id: string;
   lat: number;
@@ -762,6 +762,14 @@ export default function MapCommandCenter() {
                    <h3 className="text-[10px] font-bold text-white/80 uppercase tracking-widest flex items-center gap-1.5">
                      <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse"></div>
                      Zone Management
+                     <FeatureInfoHover 
+                        title="Avoidance Zones"
+                        description="Define strict no-go areas that the vessel must navigate around."
+                        features={[
+                          { label: 'Autonomous Rerouting', detail: 'The pathfinding engine actively calculates and inserts new waypoints to skirt around drawn zones while minimizing distance.', color: '#00d4ff' },
+                          { label: 'Live Adjustment', detail: 'Modifying zones during an active mission instantly recalculates the tactical trajectory.', color: '#ef4444' }
+                        ]}
+                     />
                    </h3>
                    <Button size="sm" variant={isDrawingZone ? 'destructive' : 'ghost'} onClick={() => {
                      if(isDrawingZone) setCurrentZonePoints([]);
@@ -795,6 +803,14 @@ export default function MapCommandCenter() {
                   <h3 className="text-[10px] font-bold text-white/80 uppercase tracking-widest flex items-center gap-1.5">
                     <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></div>
                     Geofence Management
+                    <FeatureInfoHover 
+                      title="Geofences"
+                      description="Establish hard boundaries to restrict operational areas."
+                      features={[
+                        { label: 'Exclusion (Red)', detail: 'Hard limits that the vessel cannot cross. Any waypoints placed inside are instantly rejected.', color: '#ef4444' },
+                        { label: 'Containment (Blue)', detail: 'Operational boxes. If waypoints are placed outside, they are snapped back to the nearest safe edge.', color: '#3b82f6' }
+                      ]}
+                    />
                   </h3>
                 </div>
 
