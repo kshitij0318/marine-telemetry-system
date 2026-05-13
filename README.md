@@ -43,10 +43,27 @@ git clone https://github.com/kshitij0318/marine-telemetry-system.git
 cd marine-telemetry-system
 
 # 2. Copy environment files (defaults work out-of-the-box)
+
+**Mac/Linux:**
+```bash
 cp .env.example .env
 cp frontend/.env.example frontend/.env
+```
+
+**Windows (Command Prompt):**
+```cmd
+copy .env.example .env
+copy frontend\.env.example frontend\.env
+```
+
+**Windows (PowerShell):**
+```powershell
+Copy-Item .env.example .env
+Copy-Item frontend\.env.example frontend\.env
+```
 
 # 3. Build and start all 4 services (MQTT, Backend, Simulators, Frontend)
+```bash
 docker-compose up --build -d
 ```
 
@@ -75,8 +92,13 @@ docker-compose down
 # 1. Install root dependencies
 npm install
 
-# 2. Install frontend dependencies
+```bash
+# Mac/Linux & Windows (Command Prompt):
 cd frontend && npm install && cd ..
+
+# Windows (PowerShell):
+cd frontend; npm install; cd ..
+```
 
 # 3. Start a local MQTT broker (requires Docker)
 docker run -d -p 1883:1883 eclipse-mosquitto:2.0
@@ -121,16 +143,26 @@ You can disable the internal Node.js physics engine and test the dashboard with 
 
 1. **Disable Internal Simulators**: Set `DISABLE_SIMULATORS=true` in your root `.env` file and restart Docker, or prefix your local run command:
    ```bash
+   # Mac/Linux:
    DISABLE_SIMULATORS=true npm run start:all
+
+   # Windows (Command Prompt):
+   set DISABLE_SIMULATORS=true&& npm run start:all
+
+   # Windows (PowerShell):
+   $env:DISABLE_SIMULATORS="true"; npm run start:all
    ```
 2. **Inject Payloads**: Ensure your broker is running (`localhost:1883`) and publish telemetry directly to the corresponding topics. 
 
 **Using the included Python Simulator:**
 ```bash
-# Ensure paho-mqtt is installed (using python3 on macOS to bypass Homebrew environment restrictions)
+# Mac/Linux:
 python3 -m pip install paho-mqtt --break-system-packages
-# Run the script
 python3 marine_sensor_simulator.py
+
+# Windows (Command Prompt & PowerShell):
+python -m pip install paho-mqtt
+python marine_sensor_simulator.py
 ```
 
 **Using MQTT Explorer (Manual JSON):**
