@@ -63,7 +63,7 @@ try:
             }
         }
         # Uncomment to test Thruster dashboard
-        # client.publish(f"vessel/{VESSEL_ID}/thruster", json.dumps(thruster_payload))
+        client.publish(f"vessel/{VESSEL_ID}/thruster", json.dumps(thruster_payload))
 
         # CTD Payload
         ctd_payload = {
