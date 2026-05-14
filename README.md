@@ -4,9 +4,9 @@ A production-grade marine telemetry platform delivering real-time visualization,
 
 ---
 
-## 🏗 Architecture
+## 🏗 Architecture & Data Flow
 
-The system operates across four primary decoupled layers:
+The system operates across four primary decoupled layers, allowing it to seamlessly transition between internal physics simulators and real-world hardware data:
 
 ```text
 +----------------+       +--------------+       +------------------+       +---------------+
@@ -16,10 +16,25 @@ The system operates across four primary decoupled layers:
 +----------------+       +--------------+       +------------------+       +---------------+
 ```
 
-1. **Simulators**: Generate high-fidelity vessel state (GNSS, IMU, CTD, Thrusters, Radar). Publishes to `vessel/+/+/+/data`.
-2. **MQTT Broker**: Handles pub/sub routing at scale.
-3. **Backend**: Subscribes to raw MQTT data, aggregates packets into unified vessel objects, manages active devices via heartbeats, and broadcasts diffs over WebSocket (Port `5001`).
-4. **Frontend**: Vite + React interface offering tactical dashboards, dynamic mission planning, and map-based controls.
+### 1. The Data Source (MQTT Emission)
+Whether using the internal Node.js physics engines (`/simulators`), the external Python testing script (`marine_sensor_simulator.py`), or a physical marine vessel in the ocean, all hardware telemetry is published to the Mosquitto broker (Port 1883). 
+- **Topic Convention**: Data is published to `vessel/{VESSEL_ID}/{SENSOR_TYPE}` (e.g., `vessel/V001/gnss`).
+
+### 2. The Node.js Backend (Passive Funnel)
+The backend service (`/backend/services/mqttSubscriberService.js`) acts as a highly optimized, passive funnel. 
+- It subscribes to the wildcard topic `vessel/+/#`.
+- It catches incoming JSON payloads, parses them, and manages active vessel heartbeats.
+- It immediately broadcasts the data out over a persistent WebSocket connection (Port 5001).
+
+### 3. The React Frontend (Visualization & Command)
+The frontend is a Vite-powered Single Page Application (SPA) designed to render telemetry at 10Hz without performance degradation.
+- **State Management**: It uses React's Context API (`TelemetryContext` and `MissionContext`) to handle the firehose of live sensor data.
+- **Map Optimization**: For the Mission Command Center, the vessel marker rendering is decoupled from the React render cycle using imperative Leaflet map updates (`useAnimatedVesselPosition`). This allows the map to render smoothly at 60FPS without lagging the rest of the application components.
+
+### 🌟 Key Operational Features
+- **Dynamic Dashboards**: Dedicated pages for GNSS, CTD, Current Meter, Radar, and Thruster metrics. Components are purely visualization layers reacting to context updates.
+- **Mission Planning**: The map interface allows operators to drop waypoints, draw **Exclusion Zones** (Geofences), and generate automated **Survey Patterns** (like Lawnmower or Spiral paths).
+- **Automated Pathfinding**: The frontend features a pathfinding algorithm that automatically reroutes vessel trajectories around drawn exclusion zones in real-time.
 
 ---
 
@@ -189,18 +204,26 @@ You can show or hide specific dashboard pages dynamically without requiring a sy
 
 ---
 
-## 📁 Folder Structure
+## 📁 Detailed Folder Structure
 
 ```text
 .
-├── backend/            # Express API, Aggregation logic, WebSocket server
-├── electron/           # Main and Preload scripts for the desktop wrapper
+├── backend/            # Node.js Backend
+│   ├── server.js       # WebSocket server entry point
+│   └── services/       # Contains mqttSubscriberService.js (MQTT -> WebSocket bridge)
+├── electron/           # Main and Preload scripts for the desktop wrapper deployment
 ├── frontend/           # React SPA (Vite, Tailwind, Context API)
-├── infrastructure/     # DevOps configs (Mosquitto config)
-├── scripts/            # Local dev runner (start-all.js)
-├── shared/             # Shared constants and topic formats
-├── simulators/         # Physics engine generating telemetry data
-├── docker-compose.yml  # Root deployment orchestrator
+│   ├── src/
+│   │   ├── app/        # UI Components (Radix UI primitives, Layouts, Forms)
+│   │   ├── config/     # pageVisibility.ts (Dynamic feature toggling)
+│   │   ├── contexts/   # TelemetryContext.tsx (WebSocket ingestion), MissionContext.tsx
+│   │   ├── pages/      # Dashboards (GNSS, Thruster, MapCommandCenter, etc.)
+│   │   └── utils/      # Core logic (surveyPatterns.ts, routeUtils.ts, geofenceValidator.ts)
+├── infrastructure/     # DevOps configs (Mosquitto configuration)
+├── scripts/            # Local dev runners (start-all.js)
+├── simulators/         # Internal Node.js physics engines (gnssSimulator, ctdSimulator)
+├── docker-compose.yml  # Root orchestrator mapping all 4 containers together
+├── marine_sensor_simulator.py # Python script for testing external hardware injection
 └── README.md           # You are here
 ```
 
